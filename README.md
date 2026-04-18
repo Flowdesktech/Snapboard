@@ -2,7 +2,7 @@
 
 <p align="center">
   <strong>A fast, private, all-in-one screenshot &amp; screen utility for Windows.</strong><br>
-  Capture · Annotate · Blur · OCR · Color pick · Measure — all offline, no sign-up, no cloud upload.
+  Capture · Annotate · Blur · OCR · QR scan · Color pick · Measure — all offline, no sign-up, no cloud upload.
 </p>
 
 <p align="center">
@@ -31,6 +31,7 @@
 - [Settings](#settings)
 - [How the Blur tool works](#how-the-blur-tool-works)
 - [How OCR works](#how-ocr-works)
+- [How QR scanning works](#how-qr-scanning-works)
 - [The pixel ruler](#the-pixel-ruler)
 - [The color picker](#the-color-picker)
 - [Build from source](#build-from-source)
@@ -56,7 +57,7 @@ Written in C# on **.NET 10** with **WPF**, targeting Windows 10 (1903+) and Wind
 
 - **Region capture** with click-and-drag selection, live pixel-size readout, and a "Select area" crosshair cursor like Lightshot
 - **Window capture (PicPick-style)** — a compact dark-themed dropdown listing every visible top-level window (title + process name + icon). Select one and Snapboard instantly **copies it to the clipboard**, **prompts you to save** with a pre-filled filename, and fires a single tray toast summarising the result. Uses `PrintWindow(PW_RENDERFULLCONTENT)` so it works correctly with hardware-accelerated Chromium, Electron, and UWP apps, with a fullscreen-fallback for the edge cases
-- **Scrolling capture (auto-scroll)** — click any scrollable window and Snapboard takes over: it posts `WM_MOUSEWHEEL` directly to the correct child HWND (so Chrome, Edge, Electron, Slack, Discord, and Cursor all work, not just legacy Win32 controls), captures a frame every 500 ms, detects per-frame overlap, fires a page-sized "booster" scroll before declaring the page done, then **stitches**, **copies to clipboard**, **opens a save dialog**, and toasts — no manual scrolling or cropping
+- **Scrolling capture (PicPick-style, content-only)** — hover any scrollable window and Snapboard snaps a **red outline** around just the content child (Chrome's render widget, Scintilla, Edge, Electron WebView2, etc.) *without* the title bar, tabs, or toolbars. Click once and Snapboard takes over: it posts `WM_MOUSEWHEEL` directly to the correct child HWND (so Chrome, Edge, Electron, Slack, Discord, and Cursor all work — not just legacy Win32 controls), captures a frame every 500 ms, detects per-frame overlap, fires a page-sized "booster" scroll before declaring the page done, then **stitches**, **copies to clipboard**, **opens a save dialog**, and toasts. A live red outline tracks the target during capture, and Snapboard's own windows are hidden from captures via `WDA_EXCLUDEFROMCAPTURE` + physical hide so they never bleed into the stitched output — no manual scrolling, no manual cropping, no window chrome
 - **Instant full-screen capture** to clipboard + auto-save (great for documentation workflows)
 - **Capture mouse cursor** toggle — include or exclude the cursor from the shot
 - **Per-monitor-v2 DPI awareness** — correct coordinates on mixed-DPI multi-monitor setups
@@ -101,6 +102,15 @@ Drag a rectangle over passwords, API tokens, email addresses, account numbers �
 - Works against the installed Windows display / keyboard language packs (English out of the box, many others available in Windows Settings → Time &amp; Language → Language &amp; region)
 - Result opens in a dark-themed window where you can review and `Copy all` — or Snapboard gives up gracefully with a tray toast if nothing was recognized
 
+### QR code &amp; barcode scanner
+
+- **Hotkey:** `Ctrl+Shift+Q` by default
+- Drag a rectangle around any QR code, barcode, or 2D symbol on screen — Snapboard decodes it entirely offline via **ZXing.Net**
+- Recognizes **QR**, **Data Matrix**, **Aztec**, **PDF-417**, **Code 128 / 39**, **EAN-13 / 8**, **UPC-A / E**, and **ITF** barcodes
+- Automatic **upscale-and-retry** for tiny selections and **colour-inversion** fallback for light-on-dark QR codes (very common in dark-themed apps) so small or stylised codes still decode
+- Handles **multiple codes in one selection** (e.g. share sheets that show a QR + serial number side by side)
+- Result opens in a dark modal with the decoded payload, a **Copy** button, and — when the payload is an `http(s)` URL — a one-click **Open link** button that launches your default browser. Custom schemes (`file:`, `javascript:`, app handlers) require manual copy-paste by design, for safety
+
 ### Color picker (PicPick-style)
 
 - **Hotkey:** `Ctrl+Shift+C` by default
@@ -127,9 +137,12 @@ Every tool has its own configurable global hotkey:
 | Instant full-screen   | `Ctrl+PrtScn`      |
 | Color picker          | `Ctrl+Shift+C`     |
 | OCR on selection      | `Ctrl+Shift+O`     |
+| Scan QR code          | `Ctrl+Shift+Q`     |
 | Pixel ruler           | `Ctrl+Shift+R`     |
 
 Snapboard **detects hotkey conflicts at startup** (e.g. if another app has already claimed `PrtScn`) and surfaces them three ways: a tray balloon, a red footer banner on the dashboard, and an inline warning inside the Settings dialog.
+
+The **tray menu also prints the active hotkey next to every action** — right-aligned, muted, native-looking — so you always know what combo triggers what without opening Settings.
 
 ### Settings dashboard
 
@@ -146,6 +159,20 @@ Snapboard **detects hotkey conflicts at startup** (e.g. if another app has alrea
 
 Native Windows title bars are set to immersive dark mode via the DWM API on all Snapboard windows (dashboard, Settings, OCR result, ruler). No flash of white on open, no mismatched menus.
 
+### Auto-update (GitHub-powered, privacy-respecting)
+
+Snapboard checks the public GitHub Releases API once on startup and once every 24 h while it's running. When a newer version is out, a dark-themed prompt shows the release notes and three choices:
+
+- **Download and install** — the installer is fetched to `%TEMP%\Snapboard-Updates`, launched silently (`/SILENT /SUPPRESSMSGBOXES /CLOSEAPPLICATIONS /RESTARTAPPLICATIONS`), and Snapboard quits so the upgrade can complete in place.
+- **Remind me later** — no persistent state; we re-ask on the next daily check.
+- **Skip this version** — remembered in `settings.json` so automatic checks stop nagging for that specific release (manual checks still show it).
+
+Everything about the check is transparent:
+
+- No telemetry, no analytics — just an unauthenticated `GET /repos/Flowdesktech/Snapboard/releases/latest` with a descriptive `User-Agent`.
+- Toggle it off any time in *Settings → Updates → "Check for updates automatically"*.
+- Manually trigger from the tray menu (*Check for updates…*) or from the Settings UPDATES card.
+
 ## Snapboard vs. Lightshot / PicPick / Greenshot / ShareX
 
 |                                          | Snapboard | Lightshot | PicPick | Greenshot | ShareX |
@@ -156,6 +183,7 @@ Native Windows title bars are set to immersive dark mode via the DWM API on all 
 | Annotation tools                         |     ✓     |     ✓     |    ✓    |     ✓     |   ✓    |
 | **Sensitive-data blur tool**             |   **✓**   |     ✗     |    ✓    |     ✓     |   ✓    |
 | OCR on selection                         |     ✓     |     ✗     |    ✗    |     ✗     |   ✓    |
+| **QR / barcode scan on selection**       |   **✓**   |     ✗     |    ✗    |     ✗     |   ✗    |
 | Color picker                             |     ✓     |     ✗     |    ✓    |     ✓     |   ✓    |
 | Pixel ruler                              |     ✓     |     ✗     |    ✓    |     ✗     |   ✓    |
 | **Pin screenshot to screen (Snipaste-style)** | **✓** | ✗     |    ✗    |     ✗     | **✗**  |
@@ -191,6 +219,7 @@ That's it. Full shortcut reference below.
 | Instant full-screen save     | `Ctrl+PrtScn`      |
 | Color picker                 | `Ctrl+Shift+C`     |
 | OCR on selection             | `Ctrl+Shift+O`     |
+| Scan QR code                 | `Ctrl+Shift+Q`     |
 | Pixel ruler                  | `Ctrl+Shift+R`     |
 
 All are **rebindable** under *Settings → Hotkeys*.
@@ -241,6 +270,7 @@ Example:
   "InstantFullScreenHotkey": "Ctrl+PrintScreen",
   "ColorPickerHotkey": "Ctrl+Shift+C",
   "OcrHotkey": "Ctrl+Shift+O",
+  "QrHotkey": "Ctrl+Shift+Q",
   "PixelRulerHotkey": "Ctrl+Shift+R",
   "CaptureCursor": false,
   "TrayClickCaptures": true,
@@ -272,6 +302,17 @@ Snapboard uses **`Windows.Media.Ocr`** (built into Windows 10/11) — no Tessera
 Critically the OCR runs **entirely off the UI thread**, so your desktop is never frozen while the engine is working.
 
 See [`Snapboard/Ocr/OcrService.cs`](Snapboard/Ocr/OcrService.cs) and [`Snapboard/App.xaml.cs`](Snapboard/App.xaml.cs) → `StartOcrFromBitmap`.
+
+## How QR scanning works
+
+Snapboard uses **[ZXing.Net](https://github.com/micjahn/ZXing.Net)** (the canonical Windows port of Google's barcode library) with a small amount of preprocessing that dramatically improves real-world hit rate:
+
+1. You press the QR hotkey (`Ctrl+Shift+Q`) and drag a purple selection rectangle over the symbol
+2. The overlay closes immediately and the cropped bitmap is decoded on a background thread with `TryHarder`, `TryInverted`, `AutoRotate`, and `DecodeMultiple` all enabled
+3. If the first pass fails, Snapboard tries a **3× upscale** (great for tiny codes printed inside a dashboard) and a **colour-inverted** pass (great for light-on-dark "dark mode" QRs), then returns the union of every unique code found
+4. The dark result modal shows the decoded text verbatim. If it's an `http://` or `https://` URL, an *Open link* button appears; otherwise you get *Copy* (and can paste the payload anywhere)
+
+All decoding happens **100% locally** — the selection bitmap never leaves your machine. See [`Snapboard/Qr/QrService.cs`](Snapboard/Qr/QrService.cs) and [`Snapboard/App.xaml.cs`](Snapboard/App.xaml.cs) → `StartQrFromBitmap`.
 
 ## The pixel ruler
 
@@ -334,8 +375,9 @@ Snapboard/
   SettingsWindow.xaml(.cs)       Hotkeys · Output · Capture behavior
 
   ScrollingCapture/
-    ScrollingSelectorWindow.xaml(.cs)  Click-picker: highlights the scrollable window under the cursor
-    ScrollingSessionWindow.xaml(.cs)   Auto-scroll loop (WM_MOUSEWHEEL + booster verify) → stitch → clipboard + SaveFileDialog
+    ScrollingSelectorWindow.xaml(.cs)   Click-picker: red-outlines the deepest scrollable child (content area, no chrome)
+    ScrollingSessionWindow.xaml(.cs)    Auto-scroll loop (WM_MOUSEWHEEL + booster verify) → stitch → clipboard + SaveFileDialog
+    ScrollingTargetOutlineWindow.xaml(.cs)  Click-through red outline overlay that tracks the target during capture
 
   ColorPicker/
     ColorPickerWindow.xaml(.cs)  Fullscreen magnifier + HEX/RGB/HSL readout
@@ -344,6 +386,11 @@ Snapboard/
     OcrSelectionWindow.xaml(.cs) Region selector for OCR (non-blocking)
     OcrResultWindow.xaml(.cs)    Dark result viewer + Copy all
     OcrService.cs                Thin wrapper around Windows.Media.Ocr
+
+  Qr/
+    QrSelectionWindow.xaml(.cs)  Region selector for QR / barcode decoding
+    QrResultWindow.xaml(.cs)     Dark result modal + Copy / Open link
+    QrService.cs                 ZXing.Net wrapper with upscale + invert fallbacks
 
   Ruler/
     PixelRulerWindow.xaml(.cs)   PicPick-style floating ruler
@@ -357,10 +404,15 @@ Snapboard/
     HotkeyManager.cs             RegisterHotKey / UnregisterHotKey wrapper
     ScreenCapture.cs             GDI screen grab + WPF interop
     WindowEnumerator.cs          EnumWindows + PrintWindow + DWM cloak filtering
-    ImageStitcher.cs             Vertical-overlap detection + frame stitching
+    ImageStitcher.cs             Multi-strip overlap correlation + near-identical frame detection
     BlurHelper.cs                Fast approximate blur (downscale + upscale)
     BitmapSaver.cs               PNG/JPEG encode + auto-save path resolver
     DarkTitleBar.cs              DWM immersive dark mode helper
+    CaptureAffinity.cs           SetWindowDisplayAffinity / WDA_EXCLUDEFROMCAPTURE helper
+
+  Updates/
+    UpdateService.cs             GitHub Releases check + installer download
+    UpdatePromptWindow.xaml(.cs) Dark prompt with release notes + Install / Later / Skip
 
   Controls/
     HotkeyBox.cs                 Keyboard-recorder control for Settings
@@ -394,7 +446,10 @@ Yes — open *Settings → Startup* and tick **"Launch Snapboard when I sign in 
 
 ## Roadmap
 
-- [ ] **Pinned floating screenshots** — pin any capture as a top-most window
+- [x] **Pinned floating screenshots** — shipped in 0.1
+- [x] **Scrolling capture with PicPick-style content-area detection** — shipped in 0.2
+- [x] **QR / barcode scanner on selection** — shipped in 0.2
+- [x] **In-app auto-update from GitHub Releases** — shipped in 0.2
 - [ ] **Whiteboard mode** — blank or screenshot-backed canvas for quick sketching
 - [ ] **Multi-monitor virtual-desktop capture** in one shot
 - [ ] Shape library — numbered callouts, speech bubbles
@@ -413,6 +468,7 @@ Suggestions &amp; issues welcome — open a GitHub issue or email [contact@flowd
   <sub>
     Keywords: <em>Windows screenshot tool, Lightshot alternative, Greenshot alternative, ShareX alternative,
     free open-source screenshot app, screen annotation, blur sensitive information, OCR Windows,
-    color picker Windows, pixel ruler, PicPick alternative, privacy-first screen capture, C#, WPF, .NET 10.</em>
+    QR code scanner Windows, barcode reader desktop, scrolling screenshot, color picker Windows,
+    pixel ruler, PicPick alternative, privacy-first screen capture, C#, WPF, .NET 10.</em>
   </sub>
 </p>

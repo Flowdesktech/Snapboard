@@ -24,7 +24,7 @@ export const metadata: Metadata = {
     template: "%s | Snapboard",
   },
   description:
-    "Snapboard is a privacy-first screenshot tool for Windows with capture, annotation, blur, OCR, color picker, and pixel ruler — all local, no cloud uploads.",
+    "Snapboard is a privacy-first screenshot tool for Windows with region/window/scrolling capture, annotation, blur, OCR, QR & barcode scan, color picker, and pixel ruler — all local, no cloud uploads.",
   keywords: [
     "Snapboard",
     "Snapboard app",
@@ -33,7 +33,10 @@ export const metadata: Metadata = {
     "Greenshot alternative",
     "ShareX alternative",
     "Windows screenshot tool",
+    "scrolling screenshot Windows",
     "OCR screenshot",
+    "QR code scanner Windows",
+    "barcode reader desktop",
     "blur sensitive info screenshot",
     "open-source screenshot app",
     "privacy-first screenshot app",
@@ -61,7 +64,7 @@ export const metadata: Metadata = {
     card: "summary_large_image",
     title: "Snapboard | Open-Source Screenshot Tool for Windows",
     description:
-      "A privacy-first alternative to Lightshot, PicPick, Greenshot, and ShareX with blur, OCR, color picker, and pixel ruler.",
+      "A privacy-first alternative to Lightshot, PicPick, Greenshot, and ShareX with scrolling capture, blur, OCR, QR scan, color picker, and pixel ruler.",
     images: ["/images/snapboard-dashboard.png"],
   },
   category: "technology",

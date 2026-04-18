@@ -37,11 +37,12 @@ export default function PicPickAlternativePage() {
           <article className="card">
             <h2>What Snapboard brings</h2>
             <ul className="check-list">
-              <li>Region, window, and scrolling capture in one tool</li>
+              <li>Region, window, and PicPick-style content-only scrolling capture</li>
               <li>Pin any capture to screen as a floating reference</li>
               <li>Reverse image search on Google and Bing</li>
-              <li>Built-in blur and OCR in the same toolchain</li>
+              <li>Built-in blur, OCR, and QR / barcode scan in the same toolchain</li>
               <li>Color picker and pixel ruler with global hotkeys</li>
+              <li>Silent auto-update from GitHub Releases</li>
               <li>Open-source MIT codebase — free for commercial use</li>
             </ul>
           </article>
@@ -91,6 +92,16 @@ export default function PicPickAlternativePage() {
                 <td>OCR on selection</td>
                 <td>Yes</td>
                 <td>No</td>
+              </tr>
+              <tr>
+                <td>QR / barcode scan on selection</td>
+                <td>Yes</td>
+                <td>No</td>
+              </tr>
+              <tr>
+                <td>In-app auto-update</td>
+                <td>Yes (GitHub Releases)</td>
+                <td>Partial (manual)</td>
               </tr>
               <tr>
                 <td>Color picker + ruler</td>

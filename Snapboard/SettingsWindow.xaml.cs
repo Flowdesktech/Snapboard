@@ -5,6 +5,7 @@ using System.Windows.Controls;
 using Snapboard.Controls;
 using Snapboard.Helpers;
 using Snapboard.Settings;
+using Snapboard.Updates;
 using WF = System.Windows.Forms;
 
 namespace Snapboard;
@@ -52,6 +53,7 @@ public partial class SettingsWindow : Window
                 ("Full-screen",  FullScreenHotkeyBox,  FullScreenHotkeyError),
                 ("Color picker", ColorPickerHotkeyBox, ColorPickerHotkeyError),
                 ("OCR",          OcrHotkeyBox,         OcrHotkeyError),
+                ("QR scan",      QrHotkeyBox,          QrHotkeyError),
                 ("Pixel ruler",  PixelRulerHotkeyBox,  PixelRulerHotkeyError),
             };
 
@@ -85,6 +87,49 @@ public partial class SettingsWindow : Window
             // DataContext is the _working instance; re-assign for the TextBox to refresh.
             DataContext = null;
             DataContext = _working;
+        }
+    }
+
+    /// <summary>
+    /// "Check for updates now" button in the UPDATES card. Performs the
+    /// check inline so the user gets immediate feedback (success, up-to-
+    /// date, or failure) without dismissing the Settings window. Found
+    /// updates are delegated to <see cref="App.CheckForUpdatesManually"/>
+    /// which owns the prompt dialog.
+    /// </summary>
+    private async void OnCheckUpdatesClick(object sender, RoutedEventArgs e)
+    {
+        CheckUpdatesButton.IsEnabled = false;
+        UpdateStatusText.Text = "Checking…";
+
+        UpdateInfo? latest = null;
+        try
+        {
+            latest = await UpdateService.GetLatestReleaseAsync();
+        }
+        catch { /* surfaced as null below */ }
+
+        CheckUpdatesButton.IsEnabled = true;
+
+        if (latest == null)
+        {
+            UpdateStatusText.Text = "Couldn't reach GitHub. Try again later.";
+            return;
+        }
+
+        var current = UpdateService.GetCurrentVersion();
+        if (latest.Version <= current)
+        {
+            UpdateStatusText.Text = $"You're on the latest version ({current}).";
+            return;
+        }
+
+        UpdateStatusText.Text = $"Update available: {latest.Version}";
+        if (Application.Current is App app)
+        {
+            // Close Settings first so the update prompt owns the foreground.
+            Close();
+            app.CheckForUpdatesManually();
         }
     }
 

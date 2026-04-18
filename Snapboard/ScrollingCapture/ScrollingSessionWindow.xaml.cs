@@ -63,7 +63,17 @@ public partial class ScrollingSessionWindow : Window
 
     // ---------------- State ----------------
 
+    /// <summary>Deepest content child to capture (e.g. Chrome's render
+    /// widget). Its screen rect is what we crop each frame to, so the
+    /// stitched image has no title bars, toolbars, or status bars.</summary>
     private readonly IntPtr _targetHwnd;
+
+    /// <summary>Top-level window that owns the content child. Used for
+    /// foreground activation (you can only <c>SetForegroundWindow</c> on
+    /// top-level windows) and for the tray-toast "captured this window"
+    /// label. For simple single-HWND apps it's the same as <see cref="_targetHwnd"/>.</summary>
+    private readonly IntPtr _topHwnd;
+
     private readonly SD.Point _scrollAnchor;
     private readonly SD.Rectangle _initialWindowRect;
     private readonly List<SD.Bitmap> _frames = new();
@@ -76,12 +86,19 @@ public partial class ScrollingSessionWindow : Window
     private SD.Point _savedCursor;
     private bool _savedCursorCaptured;
     private bool _boosterSent;            // set while verifying "reached bottom" with a bigger scroll
+    private List<Window> _hiddenDuringSession = new();
+    private ScrollingTargetOutlineWindow? _outline;
 
-    public ScrollingSessionWindow(IntPtr targetHwnd, SD.Point scrollAnchor, SD.Rectangle initialWindowRect)
+    public ScrollingSessionWindow(
+        IntPtr topHwnd,
+        IntPtr captureHwnd,
+        SD.Point scrollAnchor,
+        SD.Rectangle initialCaptureRect)
     {
-        _targetHwnd = targetHwnd;
+        _topHwnd = topHwnd;
+        _targetHwnd = captureHwnd == IntPtr.Zero ? topHwnd : captureHwnd;
         _scrollAnchor = scrollAnchor;
-        _initialWindowRect = initialWindowRect;
+        _initialWindowRect = initialCaptureRect;
         InitializeComponent();
     }
 
@@ -90,8 +107,46 @@ public partial class ScrollingSessionWindow : Window
     private void OnLoaded(object sender, RoutedEventArgs e)
     {
         DarkTitleBar.Apply(this);
+        // Critical: hide *this* window from every screen-capture call we
+        // make below (CopyFromScreen, PrintWindow, etc.) so our own toolbar
+        // never bleeds into the stitched output when it's positioned over
+        // the target. Uses SetWindowDisplayAffinity(WDA_EXCLUDEFROMCAPTURE).
+        // The global class handler in App.xaml.cs already applied this to
+        // every Snapboard window; this call is defensive belt-and-braces.
+        CaptureAffinity.ExcludeFromCapture(this);
+
+        // On Win10 builds older than 2004, WDA_EXCLUDEFROMCAPTURE is a no-op
+        // — so also physically hide the dashboard / settings / etc. during
+        // the session. Everything except this session toolbar disappears
+        // from the screen entirely, guaranteeing our own UI can never bleed
+        // into the stitched output. They're restored on OnClosed.
+        _hiddenDuringSession = ((App)Application.Current)
+            .HideForCapture(typeof(ScrollingSessionWindow));
+
+        // Draw a red outline around the target so the user always sees which
+        // window is being captured. It follows the target if it moves and is
+        // click-through + excluded from captures, so it never interferes.
+        try
+        {
+            _outline = new ScrollingTargetOutlineWindow(_targetHwnd, _initialWindowRect);
+            _outline.Show();
+        }
+        catch { /* outline is purely visual — never fail the session over it */ }
+
         StartRecordingDotPulse();
         PositionAwayFromWindow();
+
+        // Tray toast so the user always gets an OS-level "capture started"
+        // cue — important when the session toolbar is tucked into a corner
+        // or partially covered by the target window. Mirrors the OCR and
+        // window-capture flows which already announce themselves this way.
+        try
+        {
+            ((App)Application.Current).NotifyInfo(
+                "Scrolling capture started",
+                "Auto-scrolling the selected content area and stitching frames. Click Stop & save to finish early.");
+        }
+        catch { /* toast is cosmetic — never fail the session over it */ }
 
         // Bring the target window up front once. We intentionally don't
         // re-steal focus on every tick — the ScrollingSession window uses
@@ -140,6 +195,14 @@ public partial class ScrollingSessionWindow : Window
         {
             try { SetCursorPos(_savedCursor.X, _savedCursor.Y); } catch { }
         }
+
+        // Tear down the red target-outline overlay if it's still up.
+        try { _outline?.Close(); } catch { }
+        _outline = null;
+
+        // Bring the Snapboard windows we hid for the session back.
+        App.RestoreAfterCapture(_hiddenDuringSession);
+        _hiddenDuringSession = new List<Window>();
     }
 
     private void OnWindowMouseDown(object sender, MouseButtonEventArgs e)
@@ -284,12 +347,16 @@ public partial class ScrollingSessionWindow : Window
         }
 
         using var curLocked = ImageStitcher.LockedBitmap.Lock(shot);
-        int overlap = ImageStitcher.FindBestOverlap(_lastLocked!, curLocked);
-        int h = shot.Height;
 
-        // Full overlap → this frame is identical to the previous one
-        // (no new content scrolled in). Drop it and count as idle.
-        if (overlap >= h - 2)
+        // Idle detection is done with a grid-sampling pixel-diff check that
+        // looks at the *whole* frame (not just a top strip). This is way
+        // more reliable than trying to overload FindBestOverlap — on pages
+        // with lots of whitespace/uniform background, the overlap search can
+        // latch onto a spurious near-max match and incorrectly flag every
+        // new-content frame as "identical", which was the 0.1.0 bug where
+        // only the first frame was ever kept. Vertical alignment is still
+        // done later, at stitch time, by FindBestOverlap.
+        if (ImageStitcher.AreFramesNearIdentical(_lastLocked!, curLocked))
         {
             shot.Dispose();
             _idleTicks++;
@@ -354,10 +421,12 @@ public partial class ScrollingSessionWindow : Window
 
     private void EnsureTargetForeground()
     {
+        // SetForegroundWindow only accepts top-level windows — passing
+        // a child HWND (e.g. Chrome_RenderWidgetHostHWND) is a no-op.
         try
         {
-            if (IsIconic(_targetHwnd)) ShowWindow(_targetHwnd, SW_RESTORE);
-            SetForegroundWindow(_targetHwnd);
+            if (IsIconic(_topHwnd)) ShowWindow(_topHwnd, SW_RESTORE);
+            SetForegroundWindow(_topHwnd);
         }
         catch { }
     }

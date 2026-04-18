@@ -3,7 +3,7 @@ import Link from "next/link";
 
 const title = "Best Windows Screenshot Tool for Fast Daily Work";
 const description =
-  "Snapboard is a fast Windows screenshot tool for capture, annotate, blur, OCR, color picking, and pixel measuring in one privacy-first app.";
+  "Snapboard is a fast Windows screenshot tool for region, window, and scrolling capture, annotate, blur, OCR, QR & barcode scan, color picking, and pixel measuring in one privacy-first app.";
 
 export const metadata: Metadata = {
   title,
@@ -39,8 +39,10 @@ export default function WindowsScreenshotToolPage() {
           <article className="card">
             <h2>Why teams pick Snapboard</h2>
             <p>
-              Snapboard balances speed and capability: it keeps everyday capture workflows simple while still giving
-              you OCR, utility tools, and privacy-first defaults.
+              Snapboard balances speed and capability: it keeps everyday capture workflows simple
+              while still giving you <strong>PicPick-style scrolling capture</strong>, OCR,{" "}
+              <strong>QR &amp; barcode scan</strong>, pin-to-screen, a color picker, a pixel ruler,
+              and <strong>silent auto-update from GitHub</strong> — all behind privacy-first defaults.
             </p>
           </article>
         </div>

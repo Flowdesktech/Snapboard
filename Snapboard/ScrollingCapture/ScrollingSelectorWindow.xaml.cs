@@ -25,6 +25,9 @@ public partial class ScrollingSelectorWindow : Window
     private static extern IntPtr WindowFromPoint(POINT pt);
 
     [DllImport("user32.dll")]
+    private static extern IntPtr ChildWindowFromPointEx(IntPtr hwndParent, POINT pt, uint flags);
+
+    [DllImport("user32.dll")]
     private static extern IntPtr GetAncestor(IntPtr hwnd, uint gaFlags);
 
     [DllImport("user32.dll", CharSet = CharSet.Auto)]
@@ -32,6 +35,9 @@ public partial class ScrollingSelectorWindow : Window
 
     [DllImport("user32.dll")]
     private static extern int GetWindowTextLength(IntPtr hwnd);
+
+    [DllImport("user32.dll", CharSet = CharSet.Auto)]
+    private static extern int GetClassName(IntPtr hwnd, StringBuilder lpClassName, int nMaxCount);
 
     [DllImport("user32.dll")]
     private static extern bool GetWindowRect(IntPtr hwnd, out RECT rect);
@@ -52,20 +58,38 @@ public partial class ScrollingSelectorWindow : Window
     private const int GWL_EXSTYLE = -20;
     private const int WS_EX_TRANSPARENT = 0x00000020;
 
+    private const uint CWP_SKIPINVISIBLE = 0x0001;
+    private const uint CWP_SKIPTRANSPARENT = 0x0004;
+
+    /// <summary>Window rects smaller than this (in screen pixels on either
+    /// axis) are treated as "user probably hit a title-bar or scroll-bar
+    /// control" and we fall back to the top-level window instead.</summary>
+    private const int MinChildSize = 120;
+
     // ----------------------------- State -----------------------------
 
-    /// <summary>Top-level window the user clicked, or null on cancel.</summary>
+    /// <summary>Top-level window the user clicked, or <see cref="IntPtr.Zero"/>
+    /// on cancel. Kept for context (tray toast titles, target-outline tracking)
+    /// but not used as the capture region — we capture the inner child instead.</summary>
     public IntPtr PickedHwnd { get; private set; } = IntPtr.Zero;
 
-    /// <summary>Screen coordinates of the click, useful for targeting the
-    /// scroll-wheel input at a specific scrollable child.</summary>
+    /// <summary>The deepest child window under the click — typically the
+    /// scrollable content area (Chrome render widget, Scintilla, RichEdit,
+    /// etc.) so the stitched output excludes title bars and toolbars. Falls
+    /// back to <see cref="PickedHwnd"/> when no suitable child exists.</summary>
+    public IntPtr CaptureHwnd { get; private set; } = IntPtr.Zero;
+
+    /// <summary>Screen coordinates of the click, used as the anchor for the
+    /// synthesized <c>WM_MOUSEWHEEL</c> events during auto-scroll.</summary>
     public SD.Point ClickScreenPoint { get; private set; }
 
-    /// <summary>Screen rect of the picked window (extended frame bounds).</summary>
+    /// <summary>Screen rect of the picked <em>capture</em> window — i.e.
+    /// the content child, not the top-level frame. This is the rectangle
+    /// each auto-scrolled frame is cropped to before stitching.</summary>
     public SD.Rectangle PickedScreenRect { get; private set; }
 
     private IntPtr _selfHandle;
-    private IntPtr _lastHovered;
+    private IntPtr _lastHoveredCapture;
 
     public ScrollingSelectorWindow()
     {
@@ -106,25 +130,42 @@ public partial class ScrollingSelectorWindow : Window
         int sx = (int)Math.Round(Left * dpi.DpiScaleX + dip.X * dpi.DpiScaleX);
         int sy = (int)Math.Round(Top  * dpi.DpiScaleY + dip.Y * dpi.DpiScaleY);
 
-        IntPtr target = ResolveTargetAt(sx, sy);
-        if (target == IntPtr.Zero)
+        var target = ResolveTargetAt(sx, sy);
+        if (target.CaptureHwnd == IntPtr.Zero)
         {
             HoverBorder.Visibility = Visibility.Collapsed;
             HoverLabel.Visibility = Visibility.Collapsed;
-            _lastHovered = IntPtr.Zero;
+            _lastHoveredCapture = IntPtr.Zero;
             return;
         }
 
-        if (target != _lastHovered)
+        if (target.CaptureHwnd != _lastHoveredCapture)
         {
-            _lastHovered = target;
-            UpdateHoverVisualForWindow(target, dpi);
+            _lastHoveredCapture = target.CaptureHwnd;
+            UpdateHoverVisualForTarget(target, dpi);
         }
 
         PositionHoverLabel(dip);
     }
 
-    private IntPtr ResolveTargetAt(int screenX, int screenY)
+    /// <summary>Resolved pair of handles + rect for a screen point. The
+    /// <see cref="TopHwnd"/> is the top-level window (used for window-title
+    /// labels and foreground activation), while <see cref="CaptureHwnd"/> is
+    /// the deepest content child — Chrome's render widget, a Scintilla
+    /// editor, a RichEdit, a WebView2 host, etc. — which is what we actually
+    /// crop frames to so the stitched output excludes title bars and
+    /// toolbars. Both are zero on failure.</summary>
+    private readonly struct ResolvedTarget
+    {
+        public readonly IntPtr TopHwnd;
+        public readonly IntPtr CaptureHwnd;
+        public readonly SD.Rectangle CaptureRect;
+        public ResolvedTarget(IntPtr top, IntPtr capture, SD.Rectangle rect)
+        { TopHwnd = top; CaptureHwnd = capture; CaptureRect = rect; }
+        public static readonly ResolvedTarget Empty = default;
+    }
+
+    private ResolvedTarget ResolveTargetAt(int screenX, int screenY)
     {
         // Temporarily mark our overlay as click-through so WindowFromPoint
         // returns the window underneath instead of our own handle. We toggle
@@ -141,46 +182,140 @@ public partial class ScrollingSelectorWindow : Window
             }
         }
 
-        IntPtr hwnd;
+        IntPtr deepest;
         try
         {
-            hwnd = WindowFromPoint(new POINT { X = screenX, Y = screenY });
+            deepest = WindowFromPoint(new POINT { X = screenX, Y = screenY });
         }
         finally
         {
             if (toggled) SetWindowLong32(_selfHandle, GWL_EXSTYLE, prevEx);
         }
 
-        if (hwnd == IntPtr.Zero) return IntPtr.Zero;
-        hwnd = GetAncestor(hwnd, GA_ROOT);
-        if (hwnd == IntPtr.Zero) return IntPtr.Zero;
-        if (hwnd == _selfHandle) return IntPtr.Zero;
-        if (hwnd == GetShellWindow()) return IntPtr.Zero;
-        return hwnd;
+        if (deepest == IntPtr.Zero) return ResolvedTarget.Empty;
+
+        IntPtr top = GetAncestor(deepest, GA_ROOT);
+        if (top == IntPtr.Zero) return ResolvedTarget.Empty;
+        if (top == _selfHandle) return ResolvedTarget.Empty;
+        if (top == GetShellWindow()) return ResolvedTarget.Empty;
+
+        // Don't let the user accidentally target Snapboard's own windows
+        // (dashboard, settings, about, toasts, …). Otherwise we'd end up
+        // "scrolling" our own UI and every stitched frame would be a
+        // screenshot of Snapboard instead of the user's target.
+        if (IsOwnWindow(top)) return ResolvedTarget.Empty;
+
+        // Pick the best capture child: the deepest visible window under the
+        // cursor that's large enough to contain "real" scrollable content.
+        // This is the PicPick trick — for Chrome / Edge / Electron we land on
+        // the render widget child which is exactly the page area (no tabs,
+        // no omnibox, no status bar), so the stitched output is clean.
+        IntPtr captureHwnd = PickBestCaptureChild(top, deepest, screenX, screenY);
+        if (captureHwnd == IntPtr.Zero || !GetWindowRect(captureHwnd, out var cr))
+        {
+            if (!GetWindowRect(top, out cr)) return ResolvedTarget.Empty;
+            captureHwnd = top;
+        }
+
+        var rect = SD.Rectangle.FromLTRB(cr.Left, cr.Top, cr.Right, cr.Bottom);
+
+        // If the resolved child is implausibly tiny on either axis (user
+        // hovered over a scroll-bar or a title-bar control) fall back to
+        // the top-level window rect — a slightly chromed capture is way
+        // better than capturing a 20-pixel-tall slice.
+        if (rect.Width < MinChildSize || rect.Height < MinChildSize)
+        {
+            if (GetWindowRect(top, out var tr))
+            {
+                rect = SD.Rectangle.FromLTRB(tr.Left, tr.Top, tr.Right, tr.Bottom);
+                captureHwnd = top;
+            }
+        }
+
+        return new ResolvedTarget(top, captureHwnd, rect);
     }
 
-    private void UpdateHoverVisualForWindow(IntPtr hwnd, DpiScale dpi)
+    /// <summary>
+    /// Walks down from <paramref name="deepest"/> (what
+    /// <c>WindowFromPoint</c> returned) toward <paramref name="top"/>,
+    /// picking the first ancestor that's at least <see cref="MinChildSize"/>
+    /// in both directions. This handles Chrome's multi-layered HWND tree
+    /// (<c>Chrome_RenderWidgetHostHWND</c> inside <c>Chrome_WidgetWin_1</c>),
+    /// Electron apps, and simple single-HWND apps alike.
+    /// </summary>
+    private static IntPtr PickBestCaptureChild(IntPtr top, IntPtr deepest, int sx, int sy)
     {
-        if (!GetWindowRect(hwnd, out var r)) { HoverBorder.Visibility = Visibility.Collapsed; return; }
+        if (deepest == IntPtr.Zero || deepest == top) return top;
+
+        // Prefer the deepest child itself if it has a generous rect.
+        if (GetWindowRect(deepest, out var dr))
+        {
+            int dw = dr.Right - dr.Left;
+            int dh = dr.Bottom - dr.Top;
+            if (dw >= MinChildSize && dh >= MinChildSize) return deepest;
+        }
+
+        // Otherwise walk the ancestor chain toward top, stopping at the
+        // first reasonably sized one.
+        IntPtr cur = deepest;
+        for (int i = 0; i < 16 && cur != IntPtr.Zero && cur != top; i++)
+        {
+            IntPtr parent = GetAncestor(cur, 1 /* GA_PARENT */);
+            if (parent == IntPtr.Zero || parent == top) break;
+            if (GetWindowRect(parent, out var pr))
+            {
+                int pw = pr.Right - pr.Left;
+                int ph = pr.Bottom - pr.Top;
+                if (pw >= MinChildSize && ph >= MinChildSize) return parent;
+            }
+            cur = parent;
+        }
+
+        return top;
+    }
+
+    private static bool IsOwnWindow(IntPtr hwnd)
+    {
+        foreach (Window w in Application.Current.Windows)
+        {
+            var h = new WindowInteropHelper(w).Handle;
+            if (h != IntPtr.Zero && h == hwnd) return true;
+        }
+        return false;
+    }
+
+    private void UpdateHoverVisualForTarget(ResolvedTarget t, DpiScale dpi)
+    {
+        var r = t.CaptureRect;
 
         // Map screen rect → overlay-local DIPs.
         double x = r.Left  / dpi.DpiScaleX - Left;
         double y = r.Top   / dpi.DpiScaleY - Top;
-        double w = (r.Right  - r.Left) / dpi.DpiScaleX;
-        double h = (r.Bottom - r.Top)  / dpi.DpiScaleY;
+        double w = r.Width  / dpi.DpiScaleX;
+        double h = r.Height / dpi.DpiScaleY;
 
         HoverBorder.Margin = new Thickness(x, y, 0, 0);
         HoverBorder.Width  = Math.Max(0, w);
         HoverBorder.Height = Math.Max(0, h);
         HoverBorder.Visibility = Visibility.Visible;
 
-        int len = GetWindowTextLength(hwnd);
+        // Label: top-level title + a hint when we've picked an inner child
+        // (so the user understands why the red rectangle doesn't match the
+        // full window frame).
+        int len = GetWindowTextLength(t.TopHwnd);
         var sb = new StringBuilder(Math.Max(32, len + 1));
-        GetWindowText(hwnd, sb, sb.Capacity);
+        GetWindowText(t.TopHwnd, sb, sb.Capacity);
         string title = sb.ToString();
         if (string.IsNullOrWhiteSpace(title)) title = "(untitled window)";
 
-        HoverLabelText.Text = title;
+        if (t.CaptureHwnd != t.TopHwnd)
+        {
+            HoverLabelText.Text = title + "  —  content area";
+        }
+        else
+        {
+            HoverLabelText.Text = title;
+        }
         HoverLabel.Visibility = Visibility.Visible;
     }
 
@@ -205,19 +340,17 @@ public partial class ScrollingSelectorWindow : Window
         int sx = (int)Math.Round(Left * dpi.DpiScaleX + dip.X * dpi.DpiScaleX);
         int sy = (int)Math.Round(Top  * dpi.DpiScaleY + dip.Y * dpi.DpiScaleY);
 
-        IntPtr target = ResolveTargetAt(sx, sy);
-        if (target == IntPtr.Zero)
+        var target = ResolveTargetAt(sx, sy);
+        if (target.CaptureHwnd == IntPtr.Zero)
         {
             // Nothing useful under the cursor — ignore and let the user try again.
             return;
         }
 
-        PickedHwnd = target;
+        PickedHwnd = target.TopHwnd;
+        CaptureHwnd = target.CaptureHwnd;
         ClickScreenPoint = new SD.Point(sx, sy);
-        if (GetWindowRect(target, out var r))
-        {
-            PickedScreenRect = SD.Rectangle.FromLTRB(r.Left, r.Top, r.Right, r.Bottom);
-        }
+        PickedScreenRect = target.CaptureRect;
         Close();
     }
 }

@@ -82,6 +82,11 @@ export default function GreenshotAlternativePage() {
                 <td>No</td>
               </tr>
               <tr>
+                <td>QR / barcode scan on selected area</td>
+                <td>Yes</td>
+                <td>No</td>
+              </tr>
+              <tr>
                 <td>Blur sensitive data</td>
                 <td>Yes</td>
                 <td>Yes</td>

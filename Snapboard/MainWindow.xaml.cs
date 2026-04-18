@@ -41,6 +41,7 @@ public partial class MainWindow : Window
         UpdateHotkeyChip(ShortcutFullScreenText,  app.Settings.InstantFullScreenHotkey, app.FullScreenHotkeyRegistered);
         UpdateHotkeyChip(ShortcutColorPickerText, app.Settings.ColorPickerHotkey,       app.ColorPickerHotkeyRegistered);
         UpdateHotkeyChip(ShortcutOcrText,         app.Settings.OcrHotkey,               app.OcrHotkeyRegistered);
+        UpdateHotkeyChip(ShortcutQrText,          app.Settings.QrHotkey,                app.QrHotkeyRegistered);
         UpdateHotkeyChip(ShortcutRulerText,       app.Settings.PixelRulerHotkey,        app.PixelRulerHotkeyRegistered);
 
         if (app.HotkeyFailures.Count > 0)
@@ -105,6 +106,7 @@ public partial class MainWindow : Window
     private void OnAboutClick(object sender, RoutedEventArgs e)            => ((App)Application.Current).OpenAbout();
     private void OnColorPickerClick(object sender, RoutedEventArgs e)      => ((App)Application.Current).StartColorPicker();
     private void OnOcrClick(object sender, RoutedEventArgs e)              => ((App)Application.Current).StartOcr();
+    private void OnQrClick(object sender, RoutedEventArgs e)               => ((App)Application.Current).StartQrScan();
     private void OnRulerClick(object sender, RoutedEventArgs e)            => ((App)Application.Current).ShowPixelRuler();
     private void OnHideToTrayClick(object sender, RoutedEventArgs e)  => HideToTray();
     private void OnExitClick(object sender, RoutedEventArgs e)        => Application.Current.Shutdown();

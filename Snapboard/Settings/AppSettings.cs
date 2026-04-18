@@ -8,6 +8,7 @@ public class AppSettings
     public string ColorPickerHotkey { get; set; } = "Ctrl+Shift+C";
     public string OcrHotkey { get; set; } = "Ctrl+Shift+O";
     public string PixelRulerHotkey { get; set; } = "Ctrl+Shift+R";
+    public string QrHotkey { get; set; } = "Ctrl+Shift+Q";
 
     // ---- Capture behavior ----
     public bool CaptureCursor { get; set; } = false;
@@ -28,6 +29,20 @@ public class AppSettings
 
     /// <summary>If true, edited captures skip the file dialog and are written directly to SaveDirectory.</summary>
     public bool AutoSaveAfterCapture { get; set; } = false;
+
+    // ---- Updates ----
+    /// <summary>When true, Snapboard contacts GitHub on startup (and once
+    /// every 24 h) to check for a newer release. No telemetry, no analytics;
+    /// only an unauthenticated GET to the public Releases API.</summary>
+    public bool AutoCheckUpdates { get; set; } = true;
+
+    /// <summary>UTC timestamp of the last update check. Used to throttle
+    /// checks to once per day while the app is running.</summary>
+    public DateTime? LastUpdateCheckUtc { get; set; }
+
+    /// <summary>Version the user explicitly chose to skip (they clicked
+    /// "Skip this version" on the update prompt). Empty = no skip.</summary>
+    public string SkippedUpdateVersion { get; set; } = "";
 
     public AppSettings Clone() => (AppSettings)MemberwiseClone();
 }

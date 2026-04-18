@@ -16,7 +16,7 @@
 
     <!-- Single source of truth for the app version.
          CI overrides this via `-p:Version=x.y.z` when building release tags. -->
-    <Version>0.1.0</Version>
+    <Version>0.2.0</Version>
     <FileVersion>$(Version)</FileVersion>
     <AssemblyVersion>$(Version)</AssemblyVersion>
     <InformationalVersion>$(Version)</InformationalVersion>
@@ -37,6 +37,10 @@
   <ItemGroup>
     <Using Remove="System.Drawing" />
     <Using Remove="System.Windows.Forms" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="ZXing.Net" Version="0.16.11" />
+    <PackageReference Include="ZXing.Net.Bindings.Windows.Compatibility" Version="0.16.14" />
   </ItemGroup>
 
   <!-- WFO0003: we intentionally keep DPI in manifest so WPF picks it up

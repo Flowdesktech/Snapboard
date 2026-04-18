@@ -62,12 +62,14 @@ export default function LightshotAlternativePage() {
             <h2>What Snapboard adds</h2>
             <ul className="check-list">
               <li>Window capture — pick any open app from a dropdown, then clipboard + save dialog in one click</li>
-              <li>Scrolling capture — Snapboard auto-scrolls the target and stitches long pages for you</li>
+              <li>PicPick-style scrolling capture — Snapboard auto-scrolls the inner content child and stitches long pages for you, without any window chrome</li>
               <li>Pin any screenshot to screen as a floating reference</li>
               <li>Blur/pixelate sensitive information</li>
               <li>OCR text extraction from selected regions</li>
+              <li>QR &amp; barcode scan from any selected region (offline, via ZXing.Net)</li>
               <li>Reverse image search on Google and Bing</li>
               <li>Color picker and pixel ruler utilities</li>
+              <li>Silent auto-update from GitHub Releases</li>
               <li>Offline-first, open-source, MIT-licensed</li>
             </ul>
           </article>
@@ -115,6 +117,11 @@ export default function LightshotAlternativePage() {
               </tr>
               <tr>
                 <td>OCR on selection</td>
+                <td>Yes</td>
+                <td>No</td>
+              </tr>
+              <tr>
+                <td>QR / barcode scan on selection</td>
                 <td>Yes</td>
                 <td>No</td>
               </tr>

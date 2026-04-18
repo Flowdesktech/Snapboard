@@ -89,8 +89,22 @@ Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; \
     Flags: uninsdeletevalue; Tasks: runonstartup
 
 [Run]
+; ---- Interactive install (the user ran Setup.exe manually) ----
+; Show a pre-checked "Launch Snapboard" box on the Finished page.
+; `runasoriginaluser` makes sure we launch as the logged-in user even if
+; setup itself was elevated — keeps hotkeys / clipboard / the HKCU
+; run-at-logon key writing to the right hive.
 Filename: "{app}\{#AppExeName}"; Description: "Launch {#AppName}"; \
-    Flags: nowait postinstall skipifsilent
+    Flags: nowait postinstall skipifsilent runasoriginaluser
+
+; ---- Silent install (Snapboard's own auto-updater triggers this path) ----
+; No Finished page exists in silent mode, so the checkbox above never
+; renders. Our updater also exits the running app before launching setup
+; so /RESTARTAPPLICATIONS can't rescue us either. Fire the new build
+; straight to the tray (--autostart) so the user never "loses" Snapboard
+; after an in-place upgrade.
+Filename: "{app}\{#AppExeName}"; Parameters: "--autostart"; \
+    Flags: nowait runasoriginaluser; Check: WizardSilent
 
 [UninstallRun]
 ; Best-effort: stop a running instance before removing files so the uninstall

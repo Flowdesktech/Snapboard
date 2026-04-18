@@ -1,0 +1,45 @@
+<Window x:Class="Snapboard.ScrollingCapture.ScrollingTargetOutlineWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Snapboard — capturing window"
+        WindowStyle="None"
+        ResizeMode="NoResize"
+        AllowsTransparency="True"
+        Background="Transparent"
+        ShowInTaskbar="False"
+        Topmost="True"
+        Focusable="False"
+        ShowActivated="False"
+        UseLayoutRounding="True"
+        SnapsToDevicePixels="True"
+        IsHitTestVisible="False"
+        Loaded="OnLoaded">
+    <!-- Thick red border with a tiny corner tag so the user always knows
+         which window Snapboard is actively scrolling + capturing. The
+         window itself is click-through (WS_EX_TRANSPARENT in code-behind)
+         and is excluded from captures via the global WDA handler, so it's
+         visible to the user but invisible to screenshots. -->
+    <Grid>
+        <Rectangle x:Name="Outline"
+                   Stroke="#FFFF3B30"
+                   StrokeThickness="4"
+                   Fill="Transparent"
+                   IsHitTestVisible="False"/>
+        <Border HorizontalAlignment="Left"
+                VerticalAlignment="Top"
+                Margin="4,4,0,0"
+                Background="#EEFF3B30"
+                CornerRadius="4"
+                Padding="6,2"
+                IsHitTestVisible="False">
+            <StackPanel Orientation="Horizontal">
+                <Ellipse Width="7" Height="7" Fill="White"
+                         VerticalAlignment="Center" Margin="0,0,6,0"/>
+                <TextBlock Text="Capturing…"
+                           Foreground="White"
+                           FontSize="11"
+                           FontWeight="SemiBold"/>
+            </StackPanel>
+        </Border>
+    </Grid>
+</Window>

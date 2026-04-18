@@ -4,7 +4,7 @@
         Title="Snapboard"
         Icon="Assets/snapboard.ico"
         Width="988" Height="693"
-        MinWidth="640" MinHeight="780"
+        MinWidth="640" MinHeight="880"
         WindowStartupLocation="CenterScreen"
         Background="#FF15171C"
         Foreground="#FFE6E8EC"
@@ -449,6 +449,29 @@
                             </StackPanel>
                             <Border Grid.Column="2" Style="{StaticResource UtilityKbdValue}" VerticalAlignment="Center">
                                 <TextBlock x:Name="ShortcutOcrText" Text="—" Style="{StaticResource KbdText}"/>
+                            </Border>
+                        </Grid>
+                    </Button>
+
+                    <Button Style="{StaticResource GhostButton}"
+                            Click="OnQrClick"
+                            HorizontalContentAlignment="Stretch"
+                            Padding="12,10"
+                            MinHeight="72"
+                            Margin="0,0,0,8">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Grid.Column="0" Text="&#x25A3;" FontSize="16" Margin="0,0,10,0" VerticalAlignment="Center"/>
+                            <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="0,0,12,0">
+                                <TextBlock Text="Scan QR code" Foreground="#FFE6E8EC" FontSize="13" FontWeight="SemiBold"/>
+                                <TextBlock Text="Decode QR · data matrix · barcodes from any selection" Style="{StaticResource UtilitySubtitle}"/>
+                            </StackPanel>
+                            <Border Grid.Column="2" Style="{StaticResource UtilityKbdValue}" VerticalAlignment="Center">
+                                <TextBlock x:Name="ShortcutQrText" Text="—" Style="{StaticResource KbdText}"/>
                             </Border>
                         </Grid>
                     </Button>

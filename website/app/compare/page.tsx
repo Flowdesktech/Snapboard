@@ -4,7 +4,7 @@ import Link from "next/link";
 export const metadata: Metadata = {
   title: "Snapboard vs Lightshot, PicPick, Greenshot, ShareX",
   description:
-    "Detailed comparison of Snapboard with Lightshot, PicPick, Greenshot, and ShareX: region / window / scrolling capture, pin-to-screen, privacy, OCR, blur, color picker, pixel ruler, and workflow focus.",
+    "Detailed comparison of Snapboard with Lightshot, PicPick, Greenshot, and ShareX: region / window / scrolling capture, pin-to-screen, privacy, OCR, QR & barcode scan, blur, color picker, pixel ruler, and workflow focus.",
   alternates: {
     canonical: "/compare",
   },
@@ -87,6 +87,22 @@ export default function ComparePage() {
                 <td>No</td>
                 <td>No</td>
                 <td>No</td>
+                <td>Yes</td>
+              </tr>
+              <tr>
+                <td>QR / barcode scan on selected region</td>
+                <td>Yes (ZXing.Net, offline)</td>
+                <td>No</td>
+                <td>No</td>
+                <td>No</td>
+                <td>No</td>
+              </tr>
+              <tr>
+                <td>In-app auto-update from GitHub</td>
+                <td>Yes</td>
+                <td>No</td>
+                <td>Partial (manual)</td>
+                <td>Partial (manual)</td>
                 <td>Yes</td>
               </tr>
               <tr>

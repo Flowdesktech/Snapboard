@@ -29,8 +29,8 @@ export default function SharexAlternativePage() {
               <li>
                 You want <strong>pin-to-screen</strong> — the killer feature ShareX doesn&apos;t ship
               </li>
-              <li>You want region, window, and scrolling capture in one tool</li>
-              <li>You want blur, OCR, color picker, and ruler in one compact app</li>
+              <li>You want region, window, and PicPick-style scrolling capture in one tool</li>
+              <li>You want blur, OCR, QR / barcode scan, color picker, and ruler in one compact app</li>
               <li>You prefer a straightforward dark UI for non-technical teammates</li>
             </ul>
           </article>
@@ -82,6 +82,11 @@ export default function SharexAlternativePage() {
                 <td>OCR on selection</td>
                 <td>Yes</td>
                 <td>Yes</td>
+              </tr>
+              <tr>
+                <td>QR / barcode scan on selection</td>
+                <td>Yes (built-in)</td>
+                <td>No</td>
               </tr>
               <tr>
                 <td>Blur sensitive data</td>

@@ -250,6 +250,10 @@
                         <c:HotkeyBox x:Name="OcrHotkeyBox" Hotkey="{Binding OcrHotkey, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
                         <TextBlock x:Name="OcrHotkeyError"         Style="{StaticResource FieldError}"/>
 
+                        <TextBlock Style="{StaticResource Field}" Text="Scan QR code" Margin="0,14,0,2"/>
+                        <c:HotkeyBox x:Name="QrHotkeyBox" Hotkey="{Binding QrHotkey, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
+                        <TextBlock x:Name="QrHotkeyError"          Style="{StaticResource FieldError}"/>
+
                         <TextBlock Style="{StaticResource Field}" Text="Pixel ruler" Margin="0,14,0,2"/>
                         <c:HotkeyBox x:Name="PixelRulerHotkeyBox" Hotkey="{Binding PixelRulerHotkey, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
                         <TextBlock x:Name="PixelRulerHotkeyError"  Style="{StaticResource FieldError}"/>
@@ -283,6 +287,29 @@
                                   Content="Launch Snapboard when I sign in to Windows"/>
                         <TextBlock Style="{StaticResource Hint}"
                                    Text="Auto-started Snapboard boots straight to the tray (no dashboard window) so your capture hotkey is immediately available. Registered per-user under HKCU\...\Run — no admin rights required."/>
+                    </StackPanel>
+                </Border>
+
+                <!-- UPDATES -->
+                <Border Style="{StaticResource Card}">
+                    <StackPanel>
+                        <TextBlock Style="{StaticResource SectionLabel}" Text="UPDATES"/>
+                        <CheckBox x:Name="AutoCheckUpdatesCheck"
+                                  IsChecked="{Binding AutoCheckUpdates, Mode=TwoWay}"
+                                  Content="Check for updates automatically (daily)"/>
+                        <TextBlock Style="{StaticResource Hint}"
+                                   Text="Snapboard contacts github.com once a day to check for a newer release. No telemetry is sent — just an unauthenticated GET to the public Releases API. You'll be asked before any download."/>
+                        <StackPanel Orientation="Horizontal" Margin="0,12,0,0">
+                            <Button x:Name="CheckUpdatesButton"
+                                    Style="{StaticResource GhostButton}"
+                                    Content="Check for updates now"
+                                    Click="OnCheckUpdatesClick"/>
+                            <TextBlock x:Name="UpdateStatusText"
+                                       VerticalAlignment="Center"
+                                       Margin="12,0,0,0"
+                                       Foreground="#FF9BA1AD"
+                                       FontSize="12"/>
+                        </StackPanel>
                     </StackPanel>
                 </Border>
 

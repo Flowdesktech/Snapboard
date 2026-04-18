@@ -7,7 +7,7 @@ const repoUrl = "https://github.com/Flowdesktech/Snapboard";
 export const metadata: Metadata = {
   title: "Best Lightshot, PicPick, Greenshot & ShareX Alternative",
   description:
-    "Snapboard is a modern alternative to Lightshot, PicPick, Greenshot, and ShareX for Windows with window capture, scrolling capture, blur, OCR, color picker, pixel ruler, pin-to-screen, and zero cloud uploads.",
+    "Snapboard is a modern alternative to Lightshot, PicPick, Greenshot, and ShareX for Windows with window capture, PicPick-style scrolling capture, blur, OCR, QR & barcode scan, color picker, pixel ruler, pin-to-screen, and zero cloud uploads.",
 };
 
 const softwareSchema = {
@@ -44,8 +44,9 @@ export default function HomePage() {
           <h1>Capture regions, windows, and whole scrolling pages — all local.</h1>
           <p className="hero-subtitle">
             Snapboard is a privacy-first alternative to Lightshot, PicPick, Greenshot, and ShareX for
-            fast everyday screenshot workflows on Windows 10/11. Region, window, and scrolling capture;
-            blur, OCR, color picker, pixel ruler, and pin-to-screen — in one tiny tray app.
+            fast everyday screenshot workflows on Windows 10/11. Region, window, and PicPick-style
+            scrolling capture; blur, OCR, QR &amp; barcode scan, color picker, pixel ruler, and
+            pin-to-screen — in one tiny tray app.
           </p>
           <div className="cta-row">
             <a className="btn btn-primary" href={`${repoUrl}/releases`} target="_blank" rel="noreferrer">
@@ -62,7 +63,8 @@ export default function HomePage() {
             <span>Global hotkeys</span>
             <span>Region · Window · Scrolling</span>
             <span>Pin-to-screen</span>
-            <span>Blur + OCR + Ruler</span>
+            <span>Blur + OCR + QR + Ruler</span>
+            <span>Auto-update from GitHub</span>
           </div>
         </div>
       </section>
@@ -76,14 +78,14 @@ export default function HomePage() {
           </p>
           <div className="shot-grid">
             <figure className="shot-card shot-card-dashboard">
-              <Image
+        <Image
                 src="/images/snapboard-dashboard.png"
                 alt="Snapboard main window with capture button, shortcuts panel, and utility tools."
                 width={976}
                 height={687}
                 sizes="(max-width: 900px) 100vw, 1100px"
-                priority
-              />
+          priority
+        />
               <figcaption>Main dashboard: quick launch + utility tools in one place.</figcaption>
             </figure>
             <figure className="shot-card shot-card-capture">
@@ -174,12 +176,13 @@ export default function HomePage() {
               </p>
             </article>
             <article className="card">
-              <h3>Scrolling capture (new)</h3>
+              <h3>Scrolling capture, PicPick-style (new)</h3>
               <p>
-                Click any scrollable window and Snapboard takes over: it auto-scrolls the target by
-                posting <code>WM_MOUSEWHEEL</code> to the right child window (so Chrome, Edge,
-                Electron, Slack, Discord, and Cursor all work), stitches every frame with overlap
-                detection, then copies to the clipboard and prompts to save — no manual scrolling.
+                Hover any scrollable window and Snapboard red-outlines only the content child — no
+                title bar, tabs, or toolbars. Click once and it auto-scrolls by posting
+                <code> WM_MOUSEWHEEL</code> to the right child (Chrome, Edge, Electron, Slack,
+                Discord, Cursor), stitches every frame with multi-strip overlap correlation, then
+                copies to the clipboard and prompts to save.
               </p>
             </article>
             <article className="card">
@@ -198,6 +201,15 @@ export default function HomePage() {
               <p>Extract text from any selected area using the built-in Windows OCR engine — no cloud calls.</p>
             </article>
             <article className="card">
+              <h3>QR &amp; barcode scan (new)</h3>
+              <p>
+                Drag a rectangle around any QR, Data Matrix, Aztec, PDF-417, or EAN/UPC/Code-128
+                barcode and Snapboard decodes it offline via ZXing.Net — with automatic upscale and
+                colour-inversion fallbacks for tiny or dark-mode codes. Copy the payload or open
+                <code> http(s)</code> links in one click. Default hotkey <code>Ctrl+Shift+Q</code>.
+              </p>
+            </article>
+            <article className="card">
               <h3>Reverse image search</h3>
               <p>
                 One-click Google Images and Bing Visual Search directly from the capture toolbar — the bitmap
@@ -207,6 +219,14 @@ export default function HomePage() {
             <article className="card">
               <h3>Utilities included</h3>
               <p>Color picker with magnifier + HEX/RGB/HSL, and a floating pixel ruler — same hotkey-driven app.</p>
+            </article>
+            <article className="card">
+              <h3>Auto-update from GitHub (new)</h3>
+              <p>
+                Snapboard checks the public GitHub Releases feed on startup and once a day; a dark
+                prompt shows the release notes with Install / Later / Skip. Updates land in place
+                with a silent installer, no Store, no telemetry, and auto-relaunch after upgrade.
+              </p>
             </article>
           </div>
         </div>
@@ -338,6 +358,14 @@ export default function HomePage() {
                   <td>No</td>
                   <td>No</td>
                   <td>Yes</td>
+                </tr>
+                <tr>
+                  <td>QR / barcode scan on selection</td>
+                  <td>Yes</td>
+                  <td>No</td>
+                  <td>No</td>
+                  <td>No</td>
+                  <td>No</td>
                 </tr>
                 <tr>
                   <td>Color picker + pixel ruler</td>

@@ -16,10 +16,11 @@
         MouseMove="OnMouseMove"
         Loaded="OnLoaded">
     <Grid x:Name="RootGrid" ClipToBounds="True">
-        <!-- Highlight of the window currently hovered -->
+        <!-- Red outline on the hovered target. Matches the PicPick/Lightshot
+             convention: bright red = "click here to capture this window". -->
         <Rectangle x:Name="HoverBorder"
-                   Stroke="#FF3DA9FC" StrokeThickness="3"
-                   Fill="#223DA9FC"
+                   Stroke="#FFFF3B30" StrokeThickness="4"
+                   Fill="#22FF3B30"
                    IsHitTestVisible="False"
                    Visibility="Collapsed"
                    HorizontalAlignment="Left"
@@ -45,14 +46,15 @@
                            Margin="0,6,0,0"
                            HorizontalAlignment="Center"
                            TextAlignment="Center">
-                    Click the scrollable window you want to capture.<LineBreak/>
-                    Snapboard will auto-scroll it from top to bottom and stitch the result.
+                    Click inside the scrollable content area you want to capture.<LineBreak/>
+                    The red rectangle shows exactly what will be stitched —<LineBreak/>
+                    title bars, tabs, and toolbars are excluded automatically.
                 </TextBlock>
                 <TextBlock Foreground="#FF8C93A3"
                            FontSize="11"
                            Margin="0,6,0,0"
                            HorizontalAlignment="Center">
-                    Esc cancels · Tip: scroll the target to the top first for a full-page capture.
+                    Esc cancels · Tip: scroll the page to the top first for a full-page capture.
                 </TextBlock>
             </StackPanel>
         </Border>

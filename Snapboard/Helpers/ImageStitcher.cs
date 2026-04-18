@@ -48,13 +48,17 @@ public static class ImageStitcher
             for (int i = 1; i < frames.Count; i++)
             {
                 using var cur = LockedBitmap.Lock(frames[i]);
-                int overlap = FindBestOverlap(prev, cur);
-                if (overlap >= height - 1)
+
+                // Defensive dedup: the capture loop already drops near-
+                // identical frames, but this catches anything that slips
+                // through (e.g. if idle detection was borderline).
+                if (AreFramesNearIdentical(prev, cur))
                 {
-                    // near-identical, skip
                     offsets[i] = int.MinValue;
                     continue;
                 }
+
+                int overlap = FindBestOverlap(prev, cur);
                 offsets[i] = outHeight - overlap;
                 outHeight += (height - overlap);
                 prev.Dispose();
@@ -80,52 +84,76 @@ public static class ImageStitcher
     }
 
     /// <summary>
-    /// Returns overlap k (1..H) where frame A's bottom k rows best match
-    /// frame B's top k rows. Returns 0 when no confident match was found —
-    /// caller appends B in full. Returns H when frames are near-identical —
-    /// caller should skip B.
+    /// Returns overlap <c>k</c> (0..H-2) where frame A's bottom <c>k</c> rows
+    /// best match frame B's top <c>k</c> rows. Returns <c>0</c> when no
+    /// confident match was found — caller should append B in full.
+    ///
+    /// Sampling strategy: we correlate TWO strips inside B (a top one and a
+    /// middle one) against A at each candidate <c>k</c>. A single top strip
+    /// is too easy to fool on content with fixed headers / whitespace /
+    /// uniform backgrounds — it can match A at many positions equally well,
+    /// and the loop locks onto the *first* (which is always "barely
+    /// scrolled"). Requiring the middle strip to ALSO align at the same
+    /// <c>k</c> eliminates that ambiguity: the middle of a viewport almost
+    /// always contains unique content.
     /// </summary>
     public static int FindBestOverlap(LockedBitmap a, LockedBitmap b)
     {
         int h = a.Height;
         int w = a.Width;
-        if (h < 8 || w < 8) return 0;
+        if (h < 32 || w < 8) return 0;
 
-        // Sample a small strip from the top of B and slide it against A.
         const int stripRows = 14;
-        int minOverlap = Math.Max(stripRows, h / 24);
-        int maxOverlap = h - 2;
+        int topStrip    = 0;
+        int middleStrip = h / 3;
 
-        // Sample every Nth column for speed; with 1920px wide frames this
-        // gives ~64 samples per row which is plenty for correlation.
+        // Sample every Nth column for speed — with 1920 px wide frames this
+        // still gives ~64 samples per row, plenty for correlation.
         int colStep = Math.Max(1, w / 64);
         int colSamples = 0;
         for (int x = 0; x < w; x += colStep) colSamples++;
         if (colSamples == 0) return 0;
-        int samplesPerStrip = stripRows * colSamples;
+        int samplesTotal = stripRows * 2 * colSamples;
+
+        // Both strips must fit inside the overlap region in B (rows 0..k-1),
+        // so k must be at least `middleStrip + stripRows`.
+        int minOverlap = Math.Max(middleStrip + stripRows, h / 24);
+        int maxOverlap = h - 2;
+        if (minOverlap >= maxOverlap) return 0;
+
+        Span<int> bStarts = stackalloc int[] { topStrip, middleStrip };
 
         long bestError = long.MaxValue;
         int bestK = 0;
 
         // Walk from large overlaps (small scroll delta) down to small overlaps
-        // (big scroll delta) so near-stationary frames get detected first.
+        // (big scroll delta). The middle-strip constraint means we don't need
+        // to bias the search direction — a false match at maxOverlap can't
+        // survive the middle-strip cross-check.
         for (int k = maxOverlap; k >= minOverlap; k--)
         {
             long error = 0;
             long budget = bestError;
-            for (int sy = 0; sy < stripRows; sy++)
+
+            for (int s = 0; s < bStarts.Length; s++)
             {
-                int aY = h - k + sy;
-                if (aY < 0 || aY >= h) { error = long.MaxValue; break; }
-                for (int x = 0; x < w; x += colStep)
+                int bY = bStarts[s];
+                for (int sy = 0; sy < stripRows; sy++)
                 {
-                    int pa = a.GetPixel(x, aY);
-                    int pb = b.GetPixel(x, sy);
-                    error += PixelSqError(pa, pb);
+                    int aY = h - k + bY + sy;
+                    if (aY < 0 || aY >= h) { error = long.MaxValue; break; }
+                    for (int x = 0; x < w; x += colStep)
+                    {
+                        int pa = a.GetPixel(x, aY);
+                        int pb = b.GetPixel(x, bY + sy);
+                        error += PixelSqError(pa, pb);
+                        if (error >= budget) break;
+                    }
                     if (error >= budget) break;
                 }
                 if (error >= budget) break;
             }
+
             if (error < bestError)
             {
                 bestError = error;
@@ -135,14 +163,11 @@ public static class ImageStitcher
 
         if (bestK == 0) return 0;
 
-        double avgError = (double)bestError / samplesPerStrip;
+        double avgError = (double)bestError / samplesTotal;
         // Empirical threshold: ~900 ≈ avg per-channel diff of ~17 on each RGB.
         // Generous enough for anti-aliased text but rejects pure noise.
         if (avgError > 900) return 0;
 
-        // If frames are near-identical (max overlap gave near-zero error),
-        // collapse to "full overlap, skip new frame".
-        if (bestK >= maxOverlap && avgError < 40) return h;
         return bestK;
     }
 
@@ -152,6 +177,61 @@ public static class ImageStitcher
         int dg = ((a >>  8) & 0xFF) - ((b >>  8) & 0xFF);
         int db = ( a        & 0xFF) - ( b        & 0xFF);
         return dr * dr + dg * dg + db * db;
+    }
+
+    /// <summary>
+    /// Returns <c>true</c> if two same-size frames are essentially pixel-for-pixel
+    /// copies of each other — i.e. nothing scrolled between them. Samples a
+    /// coarse grid over the whole frame (not just a top strip like
+    /// <see cref="FindBestOverlap"/>), which is the right shape for "did the
+    /// page actually move?" idle detection.
+    ///
+    /// This separates *idle detection* from *overlap detection*. The scrolling
+    /// session uses this to decide whether a frame is worth keeping, and
+    /// <see cref="FindBestOverlap"/> is only used at stitch time to align the
+    /// kept frames vertically.
+    /// </summary>
+    public static bool AreFramesNearIdentical(LockedBitmap a, LockedBitmap b)
+    {
+        if (a.Width != b.Width || a.Height != b.Height) return false;
+
+        int w = a.Width;
+        int h = a.Height;
+
+        // Sample a ~64 × 32 grid over the frame. On a 1920 × 1080 capture
+        // that's ~2k sample points, plenty to detect even a single-pixel
+        // scroll while being fast enough to run every 500 ms.
+        int xStep = Math.Max(1, w / 64);
+        int yStep = Math.Max(1, h / 32);
+
+        int differentSamples = 0;
+        int totalSamples = 0;
+
+        // Per-pixel diff threshold: any pixel whose squared RGB error exceeds
+        // this is counted as "actually different" (not JPEG/anti-aliasing noise).
+        // 3 * 10^2 = 300 — a per-channel diff of ~10 on each RGB.
+        const int pixelDiffThreshold = 300;
+
+        for (int y = yStep / 2; y < h; y += yStep)
+        {
+            for (int x = xStep / 2; x < w; x += xStep)
+            {
+                int pa = a.GetPixel(x, y);
+                int pb = b.GetPixel(x, y);
+                if (PixelSqError(pa, pb) > pixelDiffThreshold)
+                {
+                    differentSamples++;
+                }
+                totalSamples++;
+            }
+        }
+
+        if (totalSamples == 0) return true;
+
+        // If more than ~1 % of samples disagree, the frames are not identical.
+        // (Fonts/cursors flicker can flip a couple of samples even on a
+        // stationary frame, so we allow a tiny tolerance.)
+        return differentSamples * 100 <= totalSamples;
     }
 
     // ------------------------------------------------------------------

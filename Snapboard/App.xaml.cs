@@ -6,9 +6,12 @@ using System.Windows.Resources;
 using Snapboard.ColorPicker;
 using Snapboard.Helpers;
 using Snapboard.Ocr;
+using Snapboard.Qr;
 using Snapboard.Ruler;
 using Snapboard.ScrollingCapture;
 using Snapboard.Settings;
+using Snapboard.Updates;
+using System.Windows.Threading;
 using WF = System.Windows.Forms;
 
 namespace Snapboard;
@@ -19,6 +22,8 @@ public partial class App : Application
     private HotkeyManager? _hotkey;
     private bool _balloonShown;
     private bool _startupHotkeyAlertShown;
+    private DispatcherTimer? _updateCheckTimer;
+    private bool _updatePromptOpen;
 
     /// <summary>True when launched with the <c>--autostart</c> flag (i.e. by
     /// the Windows logon Run key). Causes the dashboard window to stay hidden
@@ -31,6 +36,7 @@ public partial class App : Application
     public bool ColorPickerHotkeyRegistered { get; private set; }
     public bool OcrHotkeyRegistered { get; private set; }
     public bool PixelRulerHotkeyRegistered { get; private set; }
+    public bool QrHotkeyRegistered { get; private set; }
     public bool IsShuttingDown { get; private set; }
 
     /// <summary>A hotkey that couldn't be bound — usually because another app owns it.</summary>
@@ -43,6 +49,17 @@ public partial class App : Application
     {
         LaunchedAsAutoStart = e.Args.Any(a =>
             string.Equals(a, StartupRegistration.AutoStartArg, StringComparison.OrdinalIgnoreCase));
+
+        // NOTE: we intentionally do NOT apply WDA_EXCLUDEFROMCAPTURE to
+        // every Snapboard window. Earlier versions of this code did, but on
+        // Remote Desktop, some VM/virtual-display setups, and a few older
+        // GPU drivers the flag makes the window render completely black or
+        // invisible to the user (not just to capture APIs). The dashboard,
+        // settings, and editor windows therefore stay unflagged — bleed
+        // through is prevented by physically hiding them during a capture
+        // via HideForCapture/RestoreAfterCapture. Only the tiny scroll-
+        // capture overlay windows (session toolbar, target outline) use
+        // WDA_EXCLUDEFROMCAPTURE, and each opts in explicitly.
 
         Settings = SettingsService.Load();
 
@@ -81,7 +98,141 @@ public partial class App : Application
             }
             NotifyHotkeyFailuresIfAny();
             ShowStartupHotkeyFailureAlertIfAny();
+            StartAutoUpdateChecks();
         }));
+    }
+
+    // ---------------- Auto-update ----------------
+
+    /// <summary>
+    /// Schedules background update checks. Runs one check a few seconds
+    /// after startup (so the first-run UI isn't blocked), then every 24 h
+    /// while the app is running. Respects <see cref="AppSettings.AutoCheckUpdates"/>
+    /// and the user's "skip this version" preference.
+    /// </summary>
+    private void StartAutoUpdateChecks()
+    {
+        // Stagger the first check 5 s in so we don't race with tray
+        // initialisation / hotkey registration on slow machines.
+        Dispatcher.BeginInvoke(new Action(() =>
+        {
+            _ = RunUpdateCheckAsync(manual: false);
+        }), DispatcherPriority.ApplicationIdle);
+
+        _updateCheckTimer?.Stop();
+        _updateCheckTimer = new DispatcherTimer(DispatcherPriority.Background)
+        {
+            Interval = TimeSpan.FromHours(24),
+        };
+        _updateCheckTimer.Tick += (_, _) => _ = RunUpdateCheckAsync(manual: false);
+        _updateCheckTimer.Start();
+    }
+
+    /// <summary>Tray menu "Check for updates…" entry point — forces a
+    /// check even when the last automatic check was recent and ignores the
+    /// "skipped version" preference so manual checks always prompt.</summary>
+    public void CheckForUpdatesManually()
+    {
+        _ = RunUpdateCheckAsync(manual: true);
+    }
+
+    private async Task RunUpdateCheckAsync(bool manual)
+    {
+        if (IsShuttingDown) return;
+        if (_updatePromptOpen) return;
+
+        // Automatic checks are throttled to once per 24 h and gated on the
+        // user preference. Manual checks always run.
+        if (!manual)
+        {
+            if (!Settings.AutoCheckUpdates) return;
+            if (Settings.LastUpdateCheckUtc is DateTime last &&
+                DateTime.UtcNow - last < TimeSpan.FromHours(20))
+            {
+                return;
+            }
+        }
+
+        Settings.LastUpdateCheckUtc = DateTime.UtcNow;
+        SettingsService.Save(Settings);
+
+        UpdateInfo? latest = null;
+        try
+        {
+            latest = await UpdateService.GetLatestReleaseAsync().ConfigureAwait(true);
+        }
+        catch
+        {
+            // Network blips are not user-facing for automatic checks.
+        }
+
+        if (latest == null)
+        {
+            if (manual)
+            {
+                NotifyInfo("No updates available",
+                    "Could not reach GitHub. Check your internet connection and try again.",
+                    WF.ToolTipIcon.Info);
+            }
+            return;
+        }
+
+        var current = UpdateService.GetCurrentVersion();
+        if (latest.Version <= current)
+        {
+            if (manual)
+            {
+                NotifyInfo("Snapboard is up to date",
+                    $"You're running the latest version ({current}).");
+            }
+            return;
+        }
+
+        // Automatic checks honour the "skip this version" preference; the
+        // manual menu entry deliberately ignores it so users can always
+        // reopen the prompt.
+        if (!manual &&
+            !string.IsNullOrWhiteSpace(Settings.SkippedUpdateVersion) &&
+            string.Equals(Settings.SkippedUpdateVersion, latest.Version.ToString(), StringComparison.OrdinalIgnoreCase))
+        {
+            return;
+        }
+
+        ShowUpdatePrompt(latest, current);
+    }
+
+    private void ShowUpdatePrompt(UpdateInfo info, Version current)
+    {
+        if (_updatePromptOpen) return;
+        _updatePromptOpen = true;
+        try
+        {
+            var dlg = new UpdatePromptWindow(info, current)
+            {
+                Owner = MainWindow is MainWindow mw && mw.IsVisible ? mw : null,
+            };
+            dlg.ShowDialog();
+
+            switch (dlg.Choice)
+            {
+                case UpdatePromptWindow.UpdateChoice.Install:
+                    // Installer already launched by the dialog; exit so it
+                    // can replace our binaries without "file in use" errors.
+                    ExitApp();
+                    return;
+                case UpdatePromptWindow.UpdateChoice.Skip:
+                    Settings.SkippedUpdateVersion = info.Version.ToString();
+                    SettingsService.Save(Settings);
+                    break;
+                case UpdatePromptWindow.UpdateChoice.Later:
+                    // No persistent state — we'll re-prompt in ≤24 h.
+                    break;
+            }
+        }
+        finally
+        {
+            _updatePromptOpen = false;
+        }
     }
 
     private void NotifyHotkeyFailuresIfAny()
@@ -130,22 +281,49 @@ public partial class App : Application
     {
         if (_tray == null) return;
         var menu = new WF.ContextMenuStrip();
-        menu.Items.Add("Capture region",          null, (_, _) => StartCapture());
-        menu.Items.Add("Capture window…",         null, (_, _) => StartWindowCapture());
-        menu.Items.Add("Scrolling capture…",      null, (_, _) => StartScrollingCapture());
-        menu.Items.Add("Instant full-screen save", null, (_, _) => InstantFullScreenSave());
+
+        // The WinForms ContextMenuStrip renderer reserves the right edge of
+        // each row for "ShortcutKeyDisplayString", which is exactly what
+        // we want for hotkey hints — it right-aligns the combo in a muted
+        // colour without eating the item's text. We don't use the built-in
+        // ShortcutKeys property because that would register the shortcut
+        // on the menu (which only works when the menu owner has focus) —
+        // our real hotkeys are process-wide via RegisterHotKey, and this
+        // is purely a visual hint.
+        AddItem(menu, "Capture region",            Settings.CaptureHotkey,           (_, _) => StartCapture());
+        AddItem(menu, "Capture window…",           null,                             (_, _) => StartWindowCapture());
+        AddItem(menu, "Scrolling capture…",        null,                             (_, _) => StartScrollingCapture());
+        AddItem(menu, "Instant full-screen save",  Settings.InstantFullScreenHotkey, (_, _) => InstantFullScreenSave());
         menu.Items.Add(new WF.ToolStripSeparator());
-        menu.Items.Add("Color picker",            null, (_, _) => StartColorPicker());
-        menu.Items.Add("OCR on selection",        null, (_, _) => StartOcr());
-        menu.Items.Add("Pixel ruler",             null, (_, _) => ShowPixelRuler());
+        AddItem(menu, "Color picker",              Settings.ColorPickerHotkey,       (_, _) => StartColorPicker());
+        AddItem(menu, "OCR on selection",          Settings.OcrHotkey,               (_, _) => StartOcr());
+        AddItem(menu, "Scan QR code",              Settings.QrHotkey,                (_, _) => StartQrScan());
+        AddItem(menu, "Pixel ruler",               Settings.PixelRulerHotkey,        (_, _) => ShowPixelRuler());
         menu.Items.Add(new WF.ToolStripSeparator());
-        menu.Items.Add("Open Snapboard",          null, (_, _) => ShowMainWindow());
-        menu.Items.Add("Settings…",               null, (_, _) => OpenSettings());
-        menu.Items.Add("About Snapboard",         null, (_, _) => OpenAbout());
+        AddItem(menu, "Open Snapboard",            null, (_, _) => ShowMainWindow());
+        AddItem(menu, "Settings…",                 null, (_, _) => OpenSettings());
+        AddItem(menu, "Check for updates…",        null, (_, _) => CheckForUpdatesManually());
+        AddItem(menu, "About Snapboard",           null, (_, _) => OpenAbout());
         menu.Items.Add(new WF.ToolStripSeparator());
-        menu.Items.Add("Close tool overlays",     null, (_, _) => CloseToolOverlays());
-        menu.Items.Add("Exit",                    null, (_, _) => ExitApp());
+        AddItem(menu, "Close tool overlays",       null, (_, _) => CloseToolOverlays());
+        AddItem(menu, "Exit",                      null, (_, _) => ExitApp());
+
         _tray.ContextMenuStrip = menu;
+    }
+
+    /// <summary>Adds a tray-menu item and — if <paramref name="hotkey"/> is
+    /// non-empty — shows the hotkey combo right-aligned next to the label
+    /// via <c>ShortcutKeyDisplayString</c>. The click handler and the
+    /// label text behave exactly the same whether or not a hotkey exists.</summary>
+    private static void AddItem(WF.ContextMenuStrip menu, string text, string? hotkey, EventHandler onClick)
+    {
+        var item = new WF.ToolStripMenuItem(text);
+        item.Click += onClick;
+        if (!string.IsNullOrWhiteSpace(hotkey))
+        {
+            item.ShortcutKeyDisplayString = hotkey;
+        }
+        menu.Items.Add(item);
     }
 
     /// <summary>
@@ -190,6 +368,7 @@ public partial class App : Application
         ColorPickerHotkeyRegistered = TryRegister("Color picker",  Settings.ColorPickerHotkey,       () => Dispatcher.Invoke(StartColorPicker),      failures);
         OcrHotkeyRegistered         = TryRegister("OCR",           Settings.OcrHotkey,               () => Dispatcher.Invoke(StartOcr),              failures);
         PixelRulerHotkeyRegistered  = TryRegister("Pixel ruler",   Settings.PixelRulerHotkey,        () => Dispatcher.Invoke(ShowPixelRuler),        failures);
+        QrHotkeyRegistered          = TryRegister("QR scan",       Settings.QrHotkey,                () => Dispatcher.Invoke(StartQrScan),           failures);
 
         HotkeyFailures = failures;
 
@@ -226,7 +405,7 @@ public partial class App : Application
         if (HotkeysSuspended || _hotkey == null) return;
         _hotkey.UnregisterAll();
         CaptureHotkeyRegistered = FullScreenHotkeyRegistered = ColorPickerHotkeyRegistered
-            = OcrHotkeyRegistered = PixelRulerHotkeyRegistered = false;
+            = OcrHotkeyRegistered = PixelRulerHotkeyRegistered = QrHotkeyRegistered = false;
         HotkeysSuspended = true;
     }
 
@@ -291,6 +470,10 @@ public partial class App : Application
 
         SettingsService.Save(next);
         StartupRegistration.Apply(next.RunOnStartup);
+
+        // Rebuild the tray menu so its hotkey hints reflect the new combos.
+        BuildTrayMenu();
+
         return HotkeyFailures;
     }
 
@@ -335,10 +518,24 @@ public partial class App : Application
         bool? ok = dlg.ShowDialog();
         if (ok != true || dlg.PickedWindow is not { } info) return;
 
+        // Hide the dashboard (and any other Snapboard windows) during the
+        // capture so they never end up in the screenshot. This matters for
+        // the `CaptureScreenRegion` fallback path which literally grabs
+        // pixels off the screen — without the hide, the dashboard's
+        // close/fade animation can bleed into the capture. We remember
+        // which windows we hid so we can restore them after the save flow.
+        var hiddenWindows = HideForCapture();
+
         // Do the capture on a background thread so the dialog closes instantly
         // and the UI stays responsive even when the target window is large.
-        _ = Task.Run(() =>
+        _ = Task.Run(async () =>
         {
+            // Give Windows a beat (1 s) to finish its DWM close/hide
+            // animations on the capture dialog and the dashboard before we
+            // start grabbing pixels — otherwise the fade-out of our own
+            // windows can land in the screenshot.
+            await Task.Delay(1000).ConfigureAwait(false);
+
             System.Drawing.Bitmap? shot = null;
             string? error = null;
             try
@@ -356,7 +553,7 @@ public partial class App : Application
 
             Dispatcher.Invoke(() =>
             {
-                if (IsShuttingDown) { shot?.Dispose(); return; }
+                if (IsShuttingDown) { shot?.Dispose(); RestoreAfterCapture(hiddenWindows); return; }
 
                 if (error != null || shot == null)
                 {
@@ -364,6 +561,7 @@ public partial class App : Application
                         error ?? "Unknown error while capturing that window.",
                         WF.ToolTipIcon.Error);
                     shot?.Dispose();
+                    RestoreAfterCapture(hiddenWindows);
                     return;
                 }
 
@@ -412,8 +610,57 @@ public partial class App : Application
                 }
 
                 shot.Dispose();
+                RestoreAfterCapture(hiddenWindows);
             });
         });
+    }
+
+    /// <summary>
+    /// Hides every visible Snapboard-owned window (dashboard, settings,
+    /// about, etc.) before a screen-based capture. Returns the list of
+    /// windows that were hidden so the caller can make them visible again
+    /// once the capture is done. Windows of any type in <paramref name="except"/>
+    /// stay visible — used by scrolling capture to keep its own session
+    /// toolbar on screen while hiding everything else.
+    /// </summary>
+    public List<Window> HideForCapture(params Type[] except)
+    {
+        var hidden = new List<Window>();
+        foreach (Window w in Windows)
+        {
+            if (w is WindowCaptureDialog) continue; // already closing
+            if (!w.IsVisible) continue;
+            if (except.Length > 0)
+            {
+                bool skip = false;
+                foreach (var t in except)
+                {
+                    if (t.IsInstanceOfType(w)) { skip = true; break; }
+                }
+                if (skip) continue;
+            }
+            try
+            {
+                w.Hide();
+                hidden.Add(w);
+            }
+            catch { /* best-effort */ }
+        }
+        return hidden;
+    }
+
+    /// <summary>Companion to <see cref="HideForCapture"/> — re-shows any
+    /// windows we hid. Safe to call with an empty list.</summary>
+    public static void RestoreAfterCapture(List<Window> hidden)
+    {
+        foreach (var w in hidden)
+        {
+            try
+            {
+                if (!w.IsVisible) w.Show();
+            }
+            catch { /* ignore */ }
+        }
     }
 
     /// <summary>
@@ -497,9 +744,10 @@ public partial class App : Application
             Dispatcher.BeginInvoke(new Action(() =>
             {
                 var session = new ScrollingSessionWindow(
-                    selector.PickedHwnd,
-                    selector.ClickScreenPoint,
-                    selector.PickedScreenRect);
+                    topHwnd:            selector.PickedHwnd,
+                    captureHwnd:        selector.CaptureHwnd,
+                    scrollAnchor:       selector.ClickScreenPoint,
+                    initialCaptureRect: selector.PickedScreenRect);
                 session.Show();
             }), System.Windows.Threading.DispatcherPriority.Background);
         };
@@ -527,6 +775,65 @@ public partial class App : Application
         var window = new OcrSelectionWindow();
         window.Show();
         window.Activate();
+    }
+
+    /// <summary>
+    /// Opens the QR-code scan overlay. User drags a rectangle around a
+    /// QR / barcode anywhere on screen; we crop that region and run
+    /// decoding on a background thread, showing the decoded payload in a
+    /// dark modal with Copy / Open-link actions.
+    /// </summary>
+    public void StartQrScan()
+    {
+        foreach (Window w in Windows)
+        {
+            if (w is QrSelectionWindow) return;
+        }
+        var window = new QrSelectionWindow();
+        window.Show();
+        window.Activate();
+    }
+
+    /// <summary>
+    /// Runs QR decoding on the given bitmap entirely on a background
+    /// thread. Mirrors <see cref="StartOcrFromBitmap"/>: no UI is created
+    /// until decoding has an outcome, so a slow decode can never freeze
+    /// the desktop. Errors are surfaced via tray toasts.
+    /// </summary>
+    public void StartQrFromBitmap(System.Drawing.Bitmap bmp)
+    {
+        _ = Task.Run(() =>
+        {
+            QrService.DecodeOutcome outcome;
+            try
+            {
+                outcome = QrService.Decode(bmp);
+            }
+            finally
+            {
+                bmp.Dispose();
+            }
+
+            Dispatcher.Invoke(() =>
+            {
+                if (IsShuttingDown) return;
+
+                if (!outcome.Success || outcome.Codes.Count == 0)
+                {
+                    NotifyInfo("No QR code found",
+                        outcome.Message ?? "Nothing was detected in the selection.",
+                        WF.ToolTipIcon.Warning);
+                    return;
+                }
+
+                var result = new QrResultWindow(outcome.Codes)
+                {
+                    WindowStartupLocation = WindowStartupLocation.CenterScreen,
+                };
+                result.Show();
+                result.Activate();
+            });
+        });
     }
 
     /// <summary>

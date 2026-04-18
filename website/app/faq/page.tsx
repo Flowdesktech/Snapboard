@@ -76,7 +76,23 @@ const faqSchema = {
       name: "Does Snapboard support scrolling capture of long pages?",
       acceptedAnswer: {
         "@type": "Answer",
-        text: "Yes. Click any scrollable window and Snapboard auto-scrolls it for you by posting mouse-wheel messages directly to the correct child window (so Chrome, Edge, Electron, Slack, Discord, and Cursor all work), captures every frame, detects per-frame overlap, and stitches them into a single tall image — then copies the result to the clipboard and opens a save dialog. No manual scrolling or cropping.",
+        text: "Yes, PicPick-style. Hover any scrollable window and Snapboard red-outlines only the inner content area (the scrollable child HWND — not the title bar, tabs, or toolbars). Click once and Snapboard auto-scrolls it for you by posting mouse-wheel messages directly to that child (so Chrome, Edge, Electron, Slack, Discord, and Cursor all work), captures every frame with multi-strip overlap correlation, stitches them into a single tall image, then copies the result to the clipboard and opens a save dialog. No manual scrolling or cropping — and no window chrome in the output.",
+      },
+    },
+    {
+      "@type": "Question",
+      name: "Can Snapboard scan QR codes or barcodes from the screen?",
+      acceptedAnswer: {
+        "@type": "Answer",
+        text: "Yes. Press Ctrl+Shift+Q (configurable), drag a rectangle around any QR code, Data Matrix, Aztec, PDF-417, EAN/UPC, or Code-128/39 barcode, and Snapboard decodes it fully offline via ZXing.Net. The decoded text appears in a dark modal with Copy and — for http(s) URLs — Open link buttons. Small and dark-mode codes are handled automatically via upscale and colour-inversion fallbacks.",
+      },
+    },
+    {
+      "@type": "Question",
+      name: "Does Snapboard update itself?",
+      acceptedAnswer: {
+        "@type": "Answer",
+        text: "Yes. Snapboard checks the public GitHub Releases API once on startup and once every 24 hours. If a newer version is available, a dark prompt shows the release notes and lets you Install, Later, or Skip this version. Installs happen silently in place and Snapboard relaunches after upgrade. You can disable automatic checks in Settings → Updates, and trigger a manual check any time from the tray menu.",
       },
     },
     {
@@ -128,12 +144,36 @@ export default function FaqPage() {
           <details className="faq-item">
             <summary>Does Snapboard support scrolling (long-page) capture?</summary>
             <p>
-              Yes. Click any scrollable window and Snapboard takes over: it auto-scrolls the target by
-              posting <code>WM_MOUSEWHEEL</code> to the correct child window (so Chrome, Edge, Electron,
-              Slack, Discord, and Cursor all work — not just legacy Win32 controls), captures a frame
-              every 500 ms with overlap detection, fires a page-sized &quot;booster&quot; scroll before
-              declaring the page done, stitches the result, copies it to the clipboard, and opens a save
-              dialog — no manual scrolling or cropping.
+              Yes, PicPick-style. Hover any scrollable window and Snapboard red-outlines only the
+              inner content area (the scrollable child HWND — not the title bar, tabs, or toolbars).
+              Click once and it auto-scrolls the target by posting <code>WM_MOUSEWHEEL</code> to
+              that child (so Chrome, Edge, Electron, Slack, Discord, and Cursor all work — not just
+              legacy Win32 controls), captures a frame every 500 ms with multi-strip overlap
+              correlation, fires a page-sized &quot;booster&quot; scroll before declaring the page
+              done, stitches the result, copies it to the clipboard, and opens a save dialog — no
+              manual scrolling or cropping, and no window chrome in the output.
+            </p>
+          </details>
+          <details className="faq-item">
+            <summary>Can Snapboard scan QR codes or barcodes from my screen?</summary>
+            <p>
+              Yes. Press <code>Ctrl+Shift+Q</code> (configurable), drag a rectangle around any QR
+              code, Data Matrix, Aztec, PDF-417, EAN/UPC, or Code-128/39 barcode, and Snapboard
+              decodes it fully offline via <strong>ZXing.Net</strong>. The payload appears in a dark
+              modal with <strong>Copy</strong> and — for <code>http(s)</code> URLs —{" "}
+              <strong>Open link</strong> buttons. Tiny codes are retried at 3× upscale and light-on-dark
+              QRs get an automatic colour-inversion pass, so real-world hit rate is high.
+            </p>
+          </details>
+          <details className="faq-item">
+            <summary>Does Snapboard auto-update itself?</summary>
+            <p>
+              Yes. Snapboard checks the public GitHub Releases API once on startup and once every
+              24 hours. If a newer version is available, a dark-themed prompt shows the release
+              notes and lets you <strong>Install</strong>, <strong>Later</strong>, or{" "}
+              <strong>Skip this version</strong>. Installs happen silently in place and Snapboard
+              relaunches after upgrade. You can disable automatic checks in{" "}
+              <em>Settings → Updates</em>, and trigger a manual check any time from the tray menu.
             </p>
           </details>
           <details className="faq-item">
