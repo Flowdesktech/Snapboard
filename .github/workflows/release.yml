@@ -1,0 +1,166 @@
+name: Release
+
+# Triggered by pushing a SemVer tag like "v0.1.0" or "v1.2.3-rc1".
+# Also supports a manual "Run workflow" button for testing the pipeline
+# without creating a release (workflow_dispatch → uploads artifacts only).
+on:
+  push:
+    tags:
+      - 'v[0-9]+.[0-9]+.[0-9]+*'
+  workflow_dispatch:
+    inputs:
+      dry_run_version:
+        description: 'Version to build for a dry run (no GitHub Release created). Example: 0.0.0-dev'
+        required: false
+        default: '0.0.0-dev'
+
+permissions:
+  contents: write  # required to create the GitHub Release and upload assets
+
+jobs:
+  build-release:
+    name: Build & publish Snapboard
+    runs-on: windows-latest
+
+    env:
+      # Project paths — keep these in sync with the repo layout.
+      PROJECT_PATH: Snapboard/Snapboard.csproj
+      ISS_PATH: installer/Snapboard.iss
+      RID: win-x64
+      CONFIGURATION: Release
+
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+
+      # ------------------------------------------------------------------
+      # Resolve the version. For tag pushes we strip the leading "v"; for
+      # manual dispatch we use the input the operator gave us.
+      # ------------------------------------------------------------------
+      - name: Resolve version
+        id: ver
+        shell: pwsh
+        run: |
+          if ($env:GITHUB_REF -like 'refs/tags/v*') {
+            $version = $env:GITHUB_REF -replace '^refs/tags/v',''
+            $isRelease = 'true'
+          } else {
+            $version = '${{ github.event.inputs.dry_run_version }}'
+            if ([string]::IsNullOrWhiteSpace($version)) { $version = '0.0.0-dev' }
+            $isRelease = 'false'
+          }
+          Write-Host "Resolved version: $version (release=$isRelease)"
+          "version=$version"     | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+          "is_release=$isRelease" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          # Snapboard targets net10.0-windows10.0.19041.0, so we need the
+          # matching SDK. Preview channel covers pre-GA .NET 10 builds.
+          dotnet-version: |
+            10.0.x
+          dotnet-quality: preview
+
+      - name: Restore
+        run: dotnet restore "${{ env.PROJECT_PATH }}"
+
+      # ------------------------------------------------------------------
+      # Publish the app as a self-contained single-file exe. This lets end
+      # users run Snapboard.exe directly without installing .NET.
+      # ------------------------------------------------------------------
+      - name: Publish single-file self-contained exe
+        shell: pwsh
+        run: |
+          dotnet publish "${{ env.PROJECT_PATH }}" `
+            -c ${{ env.CONFIGURATION }} `
+            -r ${{ env.RID }} `
+            --self-contained true `
+            -p:Version=${{ steps.ver.outputs.version }} `
+            -p:PublishSingleFile=true `
+            -p:IncludeNativeLibrariesForSelfExtract=true `
+            -p:EnableCompressionInSingleFile=true `
+            -p:DebugType=embedded `
+            -o publish
+
+      - name: Stage standalone exe for upload
+        id: standalone
+        shell: pwsh
+        run: |
+          $version = '${{ steps.ver.outputs.version }}'
+          $src  = "publish/Snapboard.exe"
+          $dest = "dist/Snapboard-$version-win-x64.exe"
+          New-Item -ItemType Directory -Force -Path dist | Out-Null
+          Copy-Item $src $dest
+          "path=$dest" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+          Get-Item $dest | Select-Object Name, Length
+
+      # ------------------------------------------------------------------
+      # Inno Setup ships pre-installed on windows-latest images but via
+      # Chocolatey. Ensure the compiler is on PATH.
+      # ------------------------------------------------------------------
+      - name: Ensure Inno Setup is installed
+        shell: pwsh
+        run: |
+          $iscc = Get-Command iscc -ErrorAction SilentlyContinue
+          if (-not $iscc) {
+            choco install innosetup -y --no-progress
+          }
+          # Inno Setup 6 default location in case PATH isn't refreshed in
+          # this shell yet.
+          $candidate = "C:\Program Files (x86)\Inno Setup 6\iscc.exe"
+          if (Test-Path $candidate) {
+            echo "C:\Program Files (x86)\Inno Setup 6" | Out-File -FilePath $env:GITHUB_PATH -Append
+          }
+
+      - name: Build installer
+        shell: pwsh
+        run: |
+          iscc /DAppVersion=${{ steps.ver.outputs.version }} `
+               /DSourceDir=..\publish `
+               /DOutputDir=..\dist `
+               ${{ env.ISS_PATH }}
+
+      - name: List release artifacts
+        shell: pwsh
+        run: Get-ChildItem dist | Select-Object Name, Length, LastWriteTime
+
+      # Always upload the artifacts so operators can grab them from dry runs.
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: snapboard-${{ steps.ver.outputs.version }}
+          path: dist/*
+          retention-days: 14
+
+      # ------------------------------------------------------------------
+      # Publish a GitHub Release (tag pushes only).
+      # ------------------------------------------------------------------
+      - name: Create GitHub Release
+        if: steps.ver.outputs.is_release == 'true'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ steps.ver.outputs.version }}
+          name: Snapboard ${{ steps.ver.outputs.version }}
+          draft: false
+          prerelease: ${{ contains(steps.ver.outputs.version, '-') }}
+          generate_release_notes: true
+          body: |
+            ## Snapboard ${{ steps.ver.outputs.version }}
+
+            Privacy-first Windows screenshot tool — capture, annotate, blur, OCR, color pick, pixel ruler.
+
+            ### Downloads
+
+            | File | Description |
+            | --- | --- |
+            | `Snapboard-${{ steps.ver.outputs.version }}-Setup.exe` | Windows installer (recommended) |
+            | `Snapboard-${{ steps.ver.outputs.version }}-win-x64.exe` | Standalone single-file exe (no install required) |
+
+            ### Requirements
+            - Windows 10 build 19041+ / Windows 11, x64
+
+            Built from [`${{ github.sha }}`](${{ github.server_url }}/${{ github.repository }}/commit/${{ github.sha }}).
+          files: |
+            dist/Snapboard-${{ steps.ver.outputs.version }}-Setup.exe
+            dist/Snapboard-${{ steps.ver.outputs.version }}-win-x64.exe

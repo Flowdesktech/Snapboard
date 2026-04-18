@@ -1,0 +1,210 @@
+<Window x:Class="Snapboard.PinWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Snapboard Pin"
+        WindowStyle="None"
+        AllowsTransparency="True"
+        Background="Transparent"
+        ResizeMode="NoResize"
+        ShowInTaskbar="False"
+        Topmost="True"
+        UseLayoutRounding="True"
+        SnapsToDevicePixels="True"
+        SizeToContent="WidthAndHeight"
+        Loaded="OnLoaded"
+        KeyDown="OnKeyDown"
+        MouseDown="OnWindowMouseDown"
+        MouseWheel="OnMouseWheel">
+    <Window.Resources>
+        <!-- Tiny square icon button used in the floating toolbar. -->
+        <Style x:Key="PinIconButton" TargetType="Button">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="Foreground" Value="#FFE6E8EC"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Width" Value="26"/>
+            <Setter Property="Height" Value="26"/>
+            <Setter Property="Padding" Value="0"/>
+            <Setter Property="FontSize" Value="12"/>
+            <Setter Property="FontFamily" Value="Segoe MDL2 Assets"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="Bd"
+                                Background="{TemplateBinding Background}"
+                                CornerRadius="3">
+                            <ContentPresenter HorizontalAlignment="Center"
+                                              VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="#33FFFFFF"/>
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="#55FFFFFF"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- Custom dark-themed context menu -->
+        <Style TargetType="ContextMenu">
+            <Setter Property="Background" Value="#FF1B1D22"/>
+            <Setter Property="BorderBrush" Value="#33FFFFFF"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Foreground" Value="#FFE6E8EC"/>
+            <Setter Property="Padding" Value="4"/>
+        </Style>
+        <Style TargetType="MenuItem">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="Foreground" Value="#FFE6E8EC"/>
+            <Setter Property="Padding" Value="10,6"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="MenuItem">
+                        <Border x:Name="Bd"
+                                Background="{TemplateBinding Background}"
+                                Padding="{TemplateBinding Padding}"
+                                CornerRadius="3">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <ContentPresenter Grid.Column="0"
+                                                  ContentSource="Header"
+                                                  VerticalAlignment="Center"/>
+                                <TextBlock Grid.Column="1"
+                                           Text="{TemplateBinding InputGestureText}"
+                                           Foreground="#FF8C93A3"
+                                           FontSize="11"
+                                           Margin="16,0,0,0"
+                                           VerticalAlignment="Center"/>
+                                <Popup x:Name="PART_Popup"
+                                       Placement="Right"
+                                       IsOpen="{TemplateBinding IsSubmenuOpen}"
+                                       AllowsTransparency="True"
+                                       Focusable="False">
+                                    <Border Background="#FF1B1D22"
+                                            BorderBrush="#33FFFFFF"
+                                            BorderThickness="1"
+                                            Padding="4"
+                                            CornerRadius="4">
+                                        <StackPanel IsItemsHost="True"/>
+                                    </Border>
+                                </Popup>
+                            </Grid>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsHighlighted" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="#333DA9FC"/>
+                            </Trigger>
+                            <Trigger Property="IsChecked" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="#223DA9FC"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+        <Style TargetType="Separator">
+            <Setter Property="Height" Value="1"/>
+            <Setter Property="Margin" Value="4"/>
+            <Setter Property="Background" Value="#22FFFFFF"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Separator">
+                        <Border Background="{TemplateBinding Background}" Height="1"/>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+    </Window.Resources>
+
+    <Grid x:Name="Root">
+        <!-- The pinned image itself. We render with a 1px border + shadow so
+             the pin reads as a discrete card on top of any background. -->
+        <Border x:Name="Card"
+                BorderBrush="#66000000"
+                BorderThickness="1"
+                CornerRadius="2"
+                SnapsToDevicePixels="True">
+            <Border.Effect>
+                <DropShadowEffect Color="Black" BlurRadius="18" ShadowDepth="0" Opacity="0.5"/>
+            </Border.Effect>
+            <Grid>
+                <Image x:Name="PinnedImage"
+                       Stretch="Fill"
+                       SnapsToDevicePixels="True"
+                       UseLayoutRounding="True"/>
+
+                <!-- Floating mini-toolbar. Shows on hover in the top-right
+                     corner of the pin, with Copy / Save / Close controls. -->
+                <Border x:Name="HoverBar"
+                        VerticalAlignment="Top"
+                        HorizontalAlignment="Right"
+                        Margin="6"
+                        Padding="2"
+                        CornerRadius="4"
+                        Background="#CC101114"
+                        BorderBrush="#33FFFFFF"
+                        BorderThickness="1"
+                        Opacity="0">
+                    <StackPanel Orientation="Horizontal">
+                        <Button Style="{StaticResource PinIconButton}"
+                                Click="OnCopyClick"
+                                ToolTip="Copy to clipboard (Ctrl+C)"
+                                Content="&#xE8C8;"/>
+                        <Button Style="{StaticResource PinIconButton}"
+                                Click="OnSaveClick"
+                                ToolTip="Save to file (Ctrl+S)"
+                                Content="&#xE74E;"/>
+                        <Button Style="{StaticResource PinIconButton}"
+                                Click="OnCloseClick"
+                                ToolTip="Close pin (Esc)"
+                                Content="&#xE8BB;"/>
+                    </StackPanel>
+                </Border>
+
+                <!-- Subtle zoom indicator, shows on wheel-zoom then fades. -->
+                <Border x:Name="ZoomToast"
+                        HorizontalAlignment="Center"
+                        VerticalAlignment="Bottom"
+                        Margin="0,0,0,10"
+                        Padding="8,4"
+                        CornerRadius="4"
+                        Background="#CC101114"
+                        BorderBrush="#33FFFFFF"
+                        BorderThickness="1"
+                        Opacity="0">
+                    <TextBlock x:Name="ZoomText"
+                               Foreground="#FFE6E8EC"
+                               FontSize="11"
+                               FontFamily="Segoe UI"
+                               Text="100%"/>
+                </Border>
+            </Grid>
+        </Border>
+
+        <Grid.ContextMenu>
+            <ContextMenu>
+                <MenuItem Header="Copy"          InputGestureText="Ctrl+C" Click="OnCopyClick"/>
+                <MenuItem Header="Save as…"      InputGestureText="Ctrl+S" Click="OnSaveClick"/>
+                <Separator/>
+                <MenuItem Header="Reset zoom"    InputGestureText="Ctrl+0" Click="OnResetZoomClick"/>
+                <MenuItem x:Name="AlwaysOnTopItem" Header="Always on top" IsCheckable="True" IsChecked="True" Click="OnAlwaysOnTopClick"/>
+                <MenuItem Header="Opacity">
+                    <MenuItem Header="100%" Tag="1.0" Click="OnOpacityClick"/>
+                    <MenuItem Header="85%"  Tag="0.85" Click="OnOpacityClick"/>
+                    <MenuItem Header="70%"  Tag="0.70" Click="OnOpacityClick"/>
+                    <MenuItem Header="50%"  Tag="0.50" Click="OnOpacityClick"/>
+                    <MenuItem Header="30%"  Tag="0.30" Click="OnOpacityClick"/>
+                </MenuItem>
+                <Separator/>
+                <MenuItem Header="Close pin" InputGestureText="Esc" Click="OnCloseClick"/>
+            </ContextMenu>
+        </Grid.ContextMenu>
+    </Grid>
+</Window>

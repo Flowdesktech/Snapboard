@@ -1,0 +1,73 @@
+<Window x:Class="Snapboard.ScrollingCapture.ScrollingSelectorWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Snapboard — Scrolling capture"
+        WindowStyle="None"
+        ResizeMode="NoResize"
+        AllowsTransparency="True"
+        Background="#55000000"
+        ShowInTaskbar="False"
+        Topmost="True"
+        Cursor="Hand"
+        UseLayoutRounding="True"
+        SnapsToDevicePixels="True"
+        KeyDown="OnKeyDown"
+        MouseLeftButtonDown="OnMouseDown"
+        MouseMove="OnMouseMove"
+        Loaded="OnLoaded">
+    <Grid x:Name="RootGrid" ClipToBounds="True">
+        <!-- Highlight of the window currently hovered -->
+        <Rectangle x:Name="HoverBorder"
+                   Stroke="#FF3DA9FC" StrokeThickness="3"
+                   Fill="#223DA9FC"
+                   IsHitTestVisible="False"
+                   Visibility="Collapsed"
+                   HorizontalAlignment="Left"
+                   VerticalAlignment="Top"/>
+
+        <!-- Centered instruction pill -->
+        <Border Background="#EE12141A"
+                BorderBrush="#FF3DA9FC" BorderThickness="1"
+                CornerRadius="12" Padding="20,14"
+                HorizontalAlignment="Center" VerticalAlignment="Top"
+                Margin="0,72,0,0"
+                IsHitTestVisible="False">
+            <Border.Effect>
+                <DropShadowEffect Color="Black" BlurRadius="24" ShadowDepth="2" Opacity="0.5"/>
+            </Border.Effect>
+            <StackPanel>
+                <TextBlock Text="Scrolling capture"
+                           Foreground="White"
+                           FontSize="16" FontWeight="SemiBold"
+                           HorizontalAlignment="Center"/>
+                <TextBlock Foreground="#FFB6BCC8"
+                           FontSize="12"
+                           Margin="0,6,0,0"
+                           HorizontalAlignment="Center"
+                           TextAlignment="Center">
+                    Click the scrollable window you want to capture.<LineBreak/>
+                    Snapboard will auto-scroll it from top to bottom and stitch the result.
+                </TextBlock>
+                <TextBlock Foreground="#FF8C93A3"
+                           FontSize="11"
+                           Margin="0,6,0,0"
+                           HorizontalAlignment="Center">
+                    Esc cancels · Tip: scroll the target to the top first for a full-page capture.
+                </TextBlock>
+            </StackPanel>
+        </Border>
+
+        <!-- Live label near cursor showing the hovered window's title -->
+        <Border x:Name="HoverLabel"
+                Background="#CC101114" CornerRadius="4" Padding="8,4"
+                IsHitTestVisible="False"
+                Visibility="Collapsed"
+                HorizontalAlignment="Left" VerticalAlignment="Top">
+            <TextBlock x:Name="HoverLabelText"
+                       Foreground="White" FontSize="12"
+                       FontFamily="Segoe UI"
+                       MaxWidth="420"
+                       TextTrimming="CharacterEllipsis"/>
+        </Border>
+    </Grid>
+</Window>

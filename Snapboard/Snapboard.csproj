@@ -1,0 +1,48 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0-windows10.0.19041.0</TargetFramework>
+    <SupportedOSPlatformVersion>10.0.19041.0</SupportedOSPlatformVersion>
+    <UseWPF>true</UseWPF>
+    <UseWindowsForms>true</UseWindowsForms>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <LangVersion>latest</LangVersion>
+    <AssemblyName>Snapboard</AssemblyName>
+    <RootNamespace>Snapboard</RootNamespace>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <ApplicationIcon>Assets\snapboard.ico</ApplicationIcon>
+
+    <!-- Single source of truth for the app version.
+         CI overrides this via `-p:Version=x.y.z` when building release tags. -->
+    <Version>0.1.0</Version>
+    <FileVersion>$(Version)</FileVersion>
+    <AssemblyVersion>$(Version)</AssemblyVersion>
+    <InformationalVersion>$(Version)</InformationalVersion>
+
+    <!-- Metadata surfaced in the .exe properties dialog and in About. -->
+    <Product>Snapboard</Product>
+    <Company>FlowDesk</Company>
+    <Authors>FlowDesk</Authors>
+    <Copyright>© 2026 FlowDesk</Copyright>
+    <Description>Capture · Annotate · Blur · OCR · Color pick · Measure. Privacy-first Windows screenshot tool.</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Resource Include="Assets\snapboard.ico" />
+  </ItemGroup>
+
+  <!-- Remove implicit usings that conflict with our WPF aliases -->
+  <ItemGroup>
+    <Using Remove="System.Drawing" />
+    <Using Remove="System.Windows.Forms" />
+  </ItemGroup>
+
+  <!-- WFO0003: we intentionally keep DPI in manifest so WPF picks it up
+       on startup (required for Per-Monitor-V2 on the fullscreen overlay). -->
+  <PropertyGroup>
+    <NoWarn>$(NoWarn);WFO0003</NoWarn>
+  </PropertyGroup>
+
+</Project>

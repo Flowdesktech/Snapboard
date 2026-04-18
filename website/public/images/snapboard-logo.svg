@@ -1,0 +1,25 @@
+<svg width="520" height="132" viewBox="0 0 520 132" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="sb-grad" x1="18" y1="16" x2="110" y2="112" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#7FD0FF"/>
+      <stop offset="1" stop-color="#2A95F2"/>
+    </linearGradient>
+    <linearGradient id="sb-text" x1="150" y1="24" x2="460" y2="98" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#EEF5FF"/>
+      <stop offset="1" stop-color="#BFD2EE"/>
+    </linearGradient>
+  </defs>
+
+  <rect x="2" y="2" width="128" height="128" rx="28" fill="#0D1525"/>
+  <rect x="7" y="7" width="118" height="118" rx="23" stroke="#2A3E5C" stroke-width="2"/>
+
+  <rect x="30" y="30" width="72" height="72" rx="16" fill="url(#sb-grad)"/>
+  <rect x="38" y="38" width="56" height="56" rx="12" fill="#0E1728"/>
+  <rect x="46" y="46" width="40" height="40" rx="8" fill="url(#sb-grad)"/>
+  <path d="M54 66H66V78" stroke="#E8F4FF" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M78 66H66V54" stroke="#E8F4FF" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/>
+
+  <text x="150" y="84" fill="url(#sb-text)" font-family="Segoe UI, Arial, sans-serif" font-size="58" font-weight="700" letter-spacing="0.4">
+    Snapboard
+  </text>
+</svg>
